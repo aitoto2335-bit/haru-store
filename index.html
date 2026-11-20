@@ -345,7 +345,6 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
 </section>
 <!-- 점포 등록 -->
 <section id="owner" class="page">
-    <button class="back-btn" onclick="showPage('mypage')">← 마이페이지</button>
     <h2>내 공실 등록하기</h2>
 
     <div id="ownerAccessMessage" class="access-message" hidden>
@@ -939,6 +938,7 @@ function updateMypage() {
     const user = getCurrentUser();
     const content = document.getElementById('mypageContent');
 
+    // 로그인하지 않은 경우
     if(!user) {
         content.innerHTML = `
             <h3>하루가게에 오신 것을 환영합니다!</h3>
@@ -950,6 +950,165 @@ function updateMypage() {
         `;
         return;
     }
+
+    // 로그인한 회원 정보 표시
+    content.innerHTML = `
+        <h3>내 회원 정보</h3>
+
+        <div class="data-item">
+            <p>닉네임</p>
+            <h3>${escapeHTML(user.nickname)}</h3>
+
+            <p>이름</p>
+            <h3>${escapeHTML(user.name)}</h3>
+
+            <p>회원 유형</p>
+            <h3>${escapeHTML(user.role)}</h3>
+
+            <p>전화번호</p>
+            <h3>${escapeHTML(user.phone)}</h3>
+        </div>
+
+        <button class="main-btn" onclick="showProfilePasswordCheck()">
+            개인정보 수정
+        </button>
+
+        <button class="sub-btn" onclick="routeDashboard()">
+            내 대시보드
+        </button>
+
+        <button class="sub-btn" onclick="logout()">
+            로그아웃
+        </button>
+    `;
+}
+
+
+// 개인정보 수정 전 비밀번호 확인
+function showProfilePasswordCheck() {
+    const content = document.getElementById('mypageContent');
+
+    content.innerHTML = `
+        <h3>본인 확인</h3>
+        <p>개인정보를 수정하려면 현재 비밀번호를 입력해 주세요.</p>
+
+        <form id="profilePasswordForm">
+            <label>현재 비밀번호</label>
+            <input id="profilePassword" type="password" required
+                   placeholder="현재 비밀번호 입력">
+
+            <p id="profilePasswordMessage" class="form-message error"></p>
+
+            <button class="main-btn" type="submit">확인</button>
+            <button class="sub-btn" type="button" onclick="updateMypage()">취소</button>
+        </form>
+    `;
+
+    document.getElementById('profilePasswordForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const user = getCurrentUser();
+        const password = document.getElementById('profilePassword').value;
+        const users = getData('harugageUsers');
+        const member = users.find(item => item.id === user.id);
+
+        if(!member || member.password !== password) {
+            document.getElementById('profilePasswordMessage').textContent =
+                '비밀번호가 일치하지 않습니다.';
+            return;
+        }
+
+        showProfileEditForm();
+    });
+}
+
+
+// 개인정보 수정 화면
+function showProfileEditForm() {
+    const user = getCurrentUser();
+    const content = document.getElementById('mypageContent');
+
+    content.innerHTML = `
+        <h3>개인정보 수정</h3>
+
+        <form id="profileEditForm">
+            <label>닉네임</label>
+            <input id="editNickname" value="${escapeHTML(user.nickname)}" required>
+
+            <label>이름</label>
+            <input id="editName" value="${escapeHTML(user.name)}" required>
+
+            <label>회원 유형</label>
+            <input value="${escapeHTML(user.role)}" disabled>
+
+            <label>전화번호</label>
+            <input id="editPhone" type="tel" maxlength="13"
+                   value="${escapeHTML(user.phone)}" required>
+
+            <button class="main-btn" type="submit">수정 완료</button>
+            <button class="sub-btn" type="button" onclick="updateMypage()">취소</button>
+        </form>
+    `;
+
+    document.getElementById('profileEditForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const nickname = document.getElementById('editNickname').value.trim();
+        const name = document.getElementById('editName').value.trim();
+        const phone = document.getElementById('editPhone').value.trim();
+
+        const users = getData('harugageUsers');
+        const index = users.findIndex(item => item.id === user.id);
+
+        if(index === -1) {
+            alert('회원 정보를 찾을 수 없습니다.');
+            return;
+        }
+
+        if(nickname.length < 2 || !/^[a-zA-Z0-9가-힣]+$/.test(nickname)) {
+            alert('닉네임은 2글자 이상, 한글·영어·숫자만 사용할 수 있습니다.');
+            return;
+        }
+
+        if(users.some(item =>
+            item.id !== user.id &&
+            item.nickname.toLowerCase() === nickname.toLowerCase()
+        )) {
+            alert('이미 사용 중인 닉네임입니다.');
+            return;
+        }
+
+        if(!name) {
+            alert('이름을 입력해 주세요.');
+            return;
+        }
+
+        if(!/^010-\d{4}-\d{4}$/.test(phone)) {
+            alert('전화번호를 010-XXXX-XXXX 형식으로 입력해 주세요.');
+            return;
+        }
+
+        // 회원 정보 저장
+        users[index].nickname = nickname;
+        users[index].name = name;
+        users[index].phone = phone;
+
+        saveData('harugageUsers', users);
+
+        // 현재 로그인 정보도 함께 갱신
+        const updatedUser = {
+            ...user,
+            nickname: nickname,
+            name: name,
+            phone: phone
+        };
+
+        localStorage.setItem('harugageCurrentUser', JSON.stringify(updatedUser));
+
+        alert('개인정보가 수정되었습니다.');
+        updateMypage();
+    });
+}
 
     routeDashboard();
 }
