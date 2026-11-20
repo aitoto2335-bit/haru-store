@@ -1519,19 +1519,6 @@ function updateVisitorDashboard() {
     renderDonghaePay();
     renderStamps();
 }
-
-// ==================================
-// 방문객: 개인정보 비밀번호 확인
-// ==================================
-
-function showVisitorPrivacy(button) {
-    const user = getCurrentUser();
-
-    if(!user || user.role !== '방문객') {
-        alert('방문객 계정으로 로그인해 주세요.');
-        return;
-    }
-
     
 
 // ==================================
