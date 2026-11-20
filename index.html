@@ -1983,7 +1983,9 @@ function renderRentals() {
 
 function renderTenantSchedule() {
     const container = document.getElementById('scheduleList');
-    const rentals = getMyRentals();
+    const rentals = getMyRentals().filter(
+        item => item.status !== '취소'
+    );
 
     if(!rentals.length) {
         container.innerHTML = '<div class="empty-state">일정이 없습니다.</div>';
@@ -3400,11 +3402,18 @@ document.getElementById('rentForm').addEventListener('submit', async function(ev
 // 결제한 지 며칠 지난 영수증까지 인정할지 (0이면 기간 검사 안 함)
 const RECEIPT_MAX_DAYS = 30;
 
+
 function getActivePopups() {
-    return popupsCache.filter(item =>
-        item.status !== '취소' && item.popupName
-    );
+    return popupsCache.filter(item => {
+        const rental = rentalsCache.find(
+            rental => rental.id === item.rentalId
+        );
+
+        return item.popupName &&
+            (!rental || rental.status !== '취소');
+    });
 }
+
 
 // ---------- 홈: 지금 열리는 팝업 ----------
 
@@ -3462,33 +3471,140 @@ function renderPopups() {
 
 // ---------- 임차인: 임차내역 + 팝업 정보 입력 ----------
 
+
 function renderRentals() {
     const container = document.getElementById('rentalList');
     const rentals = getMyRentals();
 
     if(!rentals.length) {
-        container.innerHTML = '<div class="empty-state">아직 등록된 임차내역이 없습니다.<br>점포 찾기에서 점포를 빌려보세요!</div>';
+        container.innerHTML =
+            '<div class="empty-state">아직 등록된 임차내역이 없습니다.<br>점포 찾기에서 점포를 빌려보세요!</div>';
         return;
     }
 
-    container.innerHTML = rentals.map(item => `
-        <div class="data-item">
-            <h3>${escapeHTML(item.shopName)}</h3>
-            <p>📍 ${escapeHTML(item.address || '주소 미등록')}</p>
-            <p>임차 기간: ${escapeHTML(item.startDate)} ~ ${escapeHTML(item.endDate)}</p>
-            <p>임차료: ${money(item.price)}</p>
-            <p>예약 상태: ${escapeHTML(item.status || '확인 중')}</p>
-            <p>🎪 팝업: ${item.popupName
-                ? escapeHTML(item.popupName)+' ('+escapeHTML(item.popupCategory || '기타')+')'
-                : '<span class="error">아직 팝업 정보가 없어요</span>'}</p>
-            <div class="item-actions">
-                <button class="small-btn" onclick="openPopupEdit('${item.id}')">
-                    ${item.popupName ? '팝업 정보 수정' : '팝업 정보 입력'}
-                </button>
+    const today = todayStr();
+
+    container.innerHTML = rentals.map(item => {
+        const isCancelled = item.status === '취소';
+        const canCancel =
+            !isCancelled && item.startDate > today;
+
+        return `
+            <div class="data-item">
+                <h3>${escapeHTML(item.shopName)}</h3>
+
+                <p>📍 ${escapeHTML(item.address || '주소 미등록')}</p>
+                <p>임차 기간: ${escapeHTML(item.startDate)} ~ ${escapeHTML(item.endDate)}</p>
+                <p>임차료: ${money(item.price)}</p>
+
+                <p>
+                    예약 상태:
+                    <strong style="color:${isCancelled ? '#d34d4d' : '#34844b'}">
+                        ${escapeHTML(item.status || '확인 중')}
+                    </strong>
+                </p>
+
+                <p>🎪 팝업: ${
+                    item.popupName
+                        ? escapeHTML(item.popupName) +
+                          ' (' + escapeHTML(item.popupCategory || '기타') + ')'
+                        : '<span class="error">아직 팝업 정보가 없어요</span>'
+                }</p>
+
+                ${!isCancelled ? `
+                    <div class="item-actions">
+                        <button class="small-btn"
+                            onclick="openPopupEdit('${escapeHTML(item.id)}')">
+                            ${item.popupName ? '팝업 정보 수정' : '팝업 정보 입력'}
+                        </button>
+
+                        ${canCancel ? `
+                            <button class="danger-btn"
+                                onclick="cancelRental('${escapeHTML(item.id)}')">
+                                예약 취소
+                            </button>
+                        ` : ''}
+                    </div>
+                ` : `
+                    <p class="error" style="margin-top:12px;">
+                        이 예약은 취소되었습니다.
+                    </p>
+                `}
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
+
+
+async function cancelRental(rentalId) {
+    const user = getCurrentUser();
+
+    if(!user) {
+        alert('로그인이 필요합니다.');
+        return;
+    }
+
+    // 본인의 예약인지 확인
+    const rental = rentalsCache.find(
+        item => item.id === rentalId &&
+                item.userId === user.id
+    );
+
+    if(!rental) {
+        alert('예약 정보를 찾을 수 없습니다.');
+        return;
+    }
+
+    if(rental.status === '취소') {
+        alert('이미 취소된 예약입니다.');
+        return;
+    }
+
+    // 시작일이 지난 예약은 취소할 수 없음
+    if(rental.startDate <= todayStr()) {
+        alert('팝업 시작일 당일부터는 예약을 취소할 수 없습니다.');
+        return;
+    }
+
+    const confirmed = confirm(
+        '정말 팝업 예약을 취소하시겠습니까?\n\n' +
+        '팝업: ' + (rental.popupName || rental.shopName) + '\n' +
+        '기간: ' + rental.startDate + ' ~ ' + rental.endDate + '\n\n' +
+        '취소 후에는 다른 이용자가 해당 기간을 예약할 수 있습니다.'
+    );
+
+    if(!confirmed) return;
+
+    try {
+        // Supabase 예약 상태 변경
+        const { data, error } = await supabaseClient
+            .from('rentals')
+            .update({ status: '취소' })
+            .eq('id', rentalId)
+            .eq('tenant_id', user.id)
+            .select('id');
+
+        if(error) throw error;
+
+        if(!data || data.length === 0) {
+            throw new Error('예약 취소 권한이 없거나 예약을 찾을 수 없습니다.');
+        }
+
+        // 최신 예약 및 팝업 정보 다시 불러오기
+        await loadRentalData();
+
+        renderRentals();
+        renderTenantSchedule();
+        renderPopups();
+
+        alert('팝업 예약이 취소되었습니다.');
+
+    } catch(error) {
+        console.error('예약 취소 오류:', error);
+        alert('예약 취소에 실패했습니다: ' + error.message);
+    }
+}
+
 
 let editingRentalId = null;
 
