@@ -4500,6 +4500,298 @@ async function findLocationByAddress() {
 }
 
 document.getElementById('vacancyAddress').addEventListener('change',findLocationByAddress);
+
+// ==================================
+// 하루가게 AI 상담 챗봇 (Gemini)
+// - 오른쪽 아래 💬 버튼을 누르면 채팅창이 열려요.
+// - 화면(버튼, 채팅창, 디자인)은 이 코드가 자동으로 만들어요.
+// - 영수증과 한도가 겹치지 않게 '다른 계정의 키'와 'lite 모델'을 써요.
+// ==================================
+
+const CHATBOT_API_KEY = '여기에_챗봇용_키를_넣으세요';
+
+// 앞에서부터 차례로 시도 (없거나 바쁘면 다음 모델로)
+const CHATBOT_MODELS = ['gemini-3.5-flash-lite','gemini-3.1-flash-lite','gemini-3.5-flash'];
+const CHATBOT_TIMEOUT_MS = 20000;
+const CHATBOT_MAX_TURNS = 10;   // 기억할 최근 대화 수
+
+// ---------- AI에게 주는 하루가게 안내문 ----------
+// 사이트 내용이 바뀌면 이 글만 고치면 챗봇 답도 바뀌어요.
+const CHATBOT_GUIDE = `
+너는 '하루가게' 웹사이트의 친절한 안내 챗봇 '하루봇'이야.
+- 한국어로, 2~5문장 정도로 짧고 쉽게 답해.
+- 아래 [안내문]과 [지금 사이트 정보]에 있는 내용만 근거로 답해.
+- 안내문에 없는 내용(예: 동해페이 사용처, 정산 날짜, 수수료 등)은 지어내지 말고
+  "그 부분은 아직 안내드릴 수 없어요. 하루가게 운영팀에 문의해 주세요."라고 답해.
+- 하루가게와 관계없는 질문에는 "저는 하루가게 이용에 관한 질문만 도와드릴 수 있어요 😊"라고 답해.
+- 메뉴 이름은 사이트에 있는 그대로 알려줘. (홈, 공실 찾기, 공실 등록, 커뮤니티, 마이페이지)
+
+[안내문]
+■ 하루가게란?
+- 강원도 동해시의 빈 점포(공실)를 하루 단위로 빌려주는 서비스야.
+- 임대인은 빈 공실을 등록하고, 임차인은 공실을 빌려 팝업 스토어를 열고,
+  방문객은 팝업을 방문하고 영수증으로 동해페이를 돌려받아.
+
+■ 회원 유형 (회원가입할 때 고름)
+- 임대인: 빈 공실을 등록하는 사람 (건물주)
+- 임차인: 공실을 빌려서 팝업을 여는 사람 (창업자)
+- 방문객: 팝업에 놀러 가는 사람 (관광객, 주민)
+- 회원가입: 마이페이지 → 회원가입. 닉네임은 2글자 이상(한글·영어·숫자만),
+  비밀번호는 8자 이상(영어·숫자·! ? * 만), 전화번호는 010-XXXX-XXXX 형식.
+
+■ 임대인: 공실 등록
+- 상단 메뉴 '공실 등록'에서 주소, 규모(평수), 하루 대여료, 소개, 대여 가능 시간을 입력해.
+- 주소를 입력하면 지도에 위치 핀이 자동으로 꽂히고, 틀리면 지도를 눌러 고칠 수 있어.
+- 마이페이지(임대인 관리 센터)의 '공실 관리'에서 등록한 공실, 후기, 건의사항을 보고,
+  '월 수익'에서 이번 달 수익과 누적 수익을 확인해.
+
+■ 임차인: 공실 빌리기
+- 상단 메뉴 '공실 찾기'에서 검색하거나 지도의 🏬 핀을 눌러 공실을 골라. (임차인 계정만 볼 수 있어)
+- '이 점포 빌리기' → 대여 시작일·종료일, 팝업 이름, 팝업 카테고리, 운영 계획을 입력하고 신청해.
+- 대여료 = 하루 대여료 × 대여 일수. 이미 예약된 날짜와 겹치면 신청할 수 없어.
+- 팝업 이름은 영수증에 찍히는 상호와 똑같이 적어야 방문객 영수증 인증이 잘 돼.
+- 마이페이지(임차인 관리 센터)에서 임차내역, 팝업 정보 수정, D-day 알림, 받은 건의사항을 볼 수 있어.
+
+■ 방문객: 동해페이 돌려받기
+- 마이페이지 → '내가 간 가게'에서 '영수증 촬영' 또는 '사진 업로드'를 눌러 영수증을 올려.
+- AI가 영수증을 읽고 결제 금액의 10%를 동해페이로 돌려줘. 방문 스탬프도 하나 쌓여.
+- 인정되는 영수증 조건:
+  1) 하루가게에 등록된 공실이나 팝업의 영수증
+  2) 편집하거나 화면을 다시 찍은 게 아닌 원본 종이 영수증
+  3) 원화(₩) 영수증
+  4) 결제한 지 30일 이내, 미래 날짜가 아닌 것
+  5) 팝업 영수증이면 팝업 운영 기간 안에 결제한 것
+  6) 이미 적립한 영수증이 아닌 것
+- 영수증이 아닌 사진을 올리면 "영수증이 아닙니다"라고 나와.
+- '돌려받은 동해페이'에서 환급 내역과 누적 금액을 볼 수 있어.
+
+■ 홈
+- '지금 열리는 팝업 🎪'에서 진행 중(🔥)이거나 오픈 예정인 팝업을 볼 수 있어.
+- 지도에서 팝업 위치를 볼 수 있고, 영수증을 인증한 곳은 ✅로 표시돼.
+
+■ 커뮤니티
+- 상단 메뉴 '커뮤니티'에서 글과 댓글을 쓸 수 있어. 전체 게시판과 내 회원 유형 게시판이 있어.
+- 글쓰기와 댓글은 로그인해야 할 수 있어. 내가 쓴 글은 마이페이지 '내가 쓴 글'에서 볼 수 있어.
+`;
+
+// ---------- 지금 사이트 정보 (공실·팝업 목록) ----------
+function chatbotSiteInfo() {
+    const lines = [];
+
+    try {
+        const user = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+        lines.push('지금 사용자: ' + (user ? (user.role || '회원') + ' (' + (user.nickname || '') + ')' : '로그인 안 함'));
+
+        const today = typeof todayStr === 'function' ? todayStr() : new Date().toISOString().slice(0,10);
+        lines.push('오늘 날짜: ' + today);
+
+        const shops = typeof getVacancies === 'function' ? getVacancies() : [];
+        lines.push('등록된 공실 수: ' + shops.length + '개');
+        shops.slice(0,15).forEach(shop => {
+            lines.push(`- 공실: ${shop.name || shop.address} / 주소 ${shop.address || '-'} / 하루 ${Number(shop.price || 0).toLocaleString('ko-KR')}원`
+                + (shop.size ? ` / 규모 ${shop.size}` : '')
+                + (shop.time ? ` / 시간 ${shop.time}` : ''));
+        });
+
+        const popups = typeof getActivePopups === 'function'
+            ? getActivePopups().filter(item => item.endDate >= today) : [];
+        lines.push('열려 있거나 열릴 팝업 수: ' + popups.length + '개');
+        popups.slice(0,15).forEach(item => {
+            lines.push(`- 팝업: ${item.popupName} (${item.popupCategory || '기타'}) / 장소 ${item.shopName || ''} / ${item.startDate} ~ ${item.endDate}`);
+        });
+    } catch(error) {
+        console.warn('[챗봇] 사이트 정보 읽기 실패',error);
+    }
+
+    return lines.join('\n');
+}
+
+// ---------- 화면 만들기 ----------
+(function createChatbotUI() {
+    const style = document.createElement('style');
+    style.textContent = `
+        #chatbotButton {
+            position: fixed; right: 24px; bottom: 24px; z-index: 2000;
+            width: 60px; height: 60px; border-radius: 50%; border: none;
+            background: #426b50; color: white; font-size: 28px; cursor: pointer;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+        }
+        #chatbotPanel {
+            position: fixed; right: 24px; bottom: 96px; z-index: 2000;
+            width: 360px; max-width: calc(100vw - 32px); height: 520px; max-height: calc(100vh - 130px);
+            background: white; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+            display: none; flex-direction: column; overflow: hidden;
+        }
+        #chatbotPanel.open { display: flex; }
+        .chatbot-header {
+            background: #426b50; color: white; padding: 14px 16px;
+            display: flex; justify-content: space-between; align-items: center; font-weight: bold;
+        }
+        .chatbot-header button { background: none; border: none; color: white; font-size: 20px; cursor: pointer; }
+        #chatbotMessages { flex: 1; overflow-y: auto; padding: 14px; background: #f8f8f5; }
+        .chatbot-msg { max-width: 85%; padding: 10px 13px; border-radius: 12px; margin-bottom: 10px;
+            font-size: 14px; line-height: 1.6; word-break: break-word; }
+        .chatbot-msg.bot { background: white; border: 1px solid #eee; }
+        .chatbot-msg.user { background: #426b50; color: white; margin-left: auto; }
+        .chatbot-msg.loading { color: #888; }
+        .chatbot-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 0; background: white; }
+        .chatbot-chips button {
+            border: 1px solid #c5d4c8; background: #eef3ee; color: #426b50;
+            border-radius: 16px; padding: 6px 10px; font-size: 12px; cursor: pointer;
+        }
+        .chatbot-input { display: flex; gap: 8px; padding: 10px 12px; background: white; border-top: 1px solid #eee; }
+        .chatbot-input input { flex: 1; margin: 0; padding: 10px; }
+        .chatbot-input button {
+            border: none; background: #426b50; color: white; border-radius: 8px; padding: 0 14px; cursor: pointer;
+        }
+        .chatbot-input button:disabled { opacity: 0.5; cursor: not-allowed; }
+    `;
+    document.head.appendChild(style);
+
+    const button = document.createElement('button');
+    button.id = 'chatbotButton';
+    button.type = 'button';
+    button.title = '하루봇에게 물어보기';
+    button.textContent = '💬';
+    button.onclick = toggleChatbot;
+
+    const panel = document.createElement('div');
+    panel.id = 'chatbotPanel';
+    panel.innerHTML = `
+        <div class="chatbot-header">
+            <span>🤖 하루봇 · 하루가게 도우미</span>
+            <button type="button" onclick="toggleChatbot()">✕</button>
+        </div>
+        <div id="chatbotMessages"></div>
+        <div class="chatbot-chips">
+            <button type="button" onclick="chatbotAsk('동해페이는 어떻게 받아요?')">동해페이 받는 법</button>
+            <button type="button" onclick="chatbotAsk('공실은 어떻게 빌려요?')">공실 빌리는 법</button>
+            <button type="button" onclick="chatbotAsk('지금 열린 팝업 알려줘')">지금 열린 팝업</button>
+        </div>
+        <form class="chatbot-input" id="chatbotForm">
+            <input id="chatbotInput" placeholder="궁금한 걸 물어보세요" maxlength="300" autocomplete="off">
+            <button type="submit" id="chatbotSend">전송</button>
+        </form>
+    `;
+
+    document.body.appendChild(button);
+    document.body.appendChild(panel);
+
+    document.getElementById('chatbotForm').addEventListener('submit',function(event) {
+        event.preventDefault();
+        const input = document.getElementById('chatbotInput');
+        const text = input.value.trim();
+        if(!text) return;
+        input.value = '';
+        chatbotAsk(text);
+    });
+
+    chatbotAddMessage('bot','안녕하세요! 하루가게 도우미 하루봇이에요 🤖\n공실 등록, 공실 빌리기, 동해페이 받는 법 등 궁금한 걸 물어보세요!');
+})();
+
+let chatbotHistory = [];
+let chatbotBusy = false;
+
+function toggleChatbot() {
+    const panel = document.getElementById('chatbotPanel');
+    panel.classList.toggle('open');
+    if(panel.classList.contains('open')) document.getElementById('chatbotInput').focus();
+}
+
+function chatbotAddMessage(who,text) {
+    const box = document.getElementById('chatbotMessages');
+    const div = document.createElement('div');
+    div.className = 'chatbot-msg ' + who;
+    div.innerHTML = escapeHTML(text).replace(/\n/g,'<br>');
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+    return div;
+}
+
+async function chatbotAsk(question) {
+    if(chatbotBusy) return;
+
+    const panel = document.getElementById('chatbotPanel');
+    if(!panel.classList.contains('open')) panel.classList.add('open');
+
+    chatbotBusy = true;
+    document.getElementById('chatbotSend').disabled = true;
+
+    chatbotAddMessage('user',question);
+    const loading = chatbotAddMessage('bot loading','답변을 준비하고 있어요...');
+
+    chatbotHistory.push({ role:'user', parts:[{ text:question }] });
+    chatbotHistory = chatbotHistory.slice(-CHATBOT_MAX_TURNS * 2);
+
+    try {
+        const answer = await chatbotCallGemini();
+        loading.remove();
+        chatbotAddMessage('bot',answer);
+        chatbotHistory.push({ role:'model', parts:[{ text:answer }] });
+    } catch(error) {
+        console.error('[챗봇]',error);
+        loading.remove();
+        chatbotAddMessage('bot',error.message || '지금은 답변하기 어려워요. 잠시 후 다시 물어봐 주세요.');
+        chatbotHistory.pop();   // 실패한 질문은 기억에서 빼기
+    } finally {
+        chatbotBusy = false;
+        document.getElementById('chatbotSend').disabled = false;
+    }
+}
+
+async function chatbotCallGemini() {
+    if(!CHATBOT_API_KEY || CHATBOT_API_KEY.includes('여기에')) {
+        throw new Error('챗봇 키가 아직 설정되지 않았어요. 코드의 CHATBOT_API_KEY에 키를 넣어주세요.');
+    }
+
+    const body = JSON.stringify({
+        systemInstruction:{ parts:[{ text:CHATBOT_GUIDE + '\n[지금 사이트 정보]\n' + chatbotSiteInfo() }] },
+        contents:chatbotHistory,
+        generationConfig:{ temperature:0.4, maxOutputTokens:600 }
+    });
+
+    for(const model of CHATBOT_MODELS) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(),CHATBOT_TIMEOUT_MS);
+
+        let response;
+        let data;
+
+        try {
+            response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+                {
+                    method:'POST',
+                    headers:{ 'Content-Type':'application/json', 'x-goog-api-key':CHATBOT_API_KEY },
+                    body,
+                    signal:controller.signal
+                }
+            );
+            data = await response.json().catch(() => ({}));
+        } catch(error) {
+            console.warn('[챗봇] '+model+' 응답 없음, 다음 모델 시도');
+            continue;
+        } finally {
+            clearTimeout(timer);
+        }
+
+        console.log('[챗봇]',model,response.status);
+
+        if([404,429,500,503].includes(response.status)) continue;
+
+        if(!response.ok) {
+            const message = data.error && data.error.message ? data.error.message : '';
+            throw new Error('챗봇 오류가 났어요. ('+response.status+') '+message);
+        }
+
+        const parts = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
+        const text = parts ? parts.map(part => part.text || '').join('').trim() : '';
+
+        if(text) return text;
+    }
+
+    throw new Error('지금 AI 서버가 바빠요. 잠시 후 다시 물어봐 주세요.');
+}
     
 // ==================================
 // 초기 실행
