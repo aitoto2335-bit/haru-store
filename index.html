@@ -216,6 +216,7 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     .hero h1 { font-size: 28px; }
 }
 </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
@@ -686,6 +687,19 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
 <footer>하루가게 © 2026. 빈 가게에 새로운 하루를.</footer>
 
 <script>
+
+// ==================================
+// Supabase 데이터베이스 연결
+// ==================================
+
+const SUPABASE_URL = '여기에 Project URL';
+const SUPABASE_KEY = '여기에 Publishable key';
+
+const supabaseClient = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_KEY
+);
+    
 // ==================================
 // Gemini AI 설정
 // ==================================
