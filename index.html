@@ -3874,6 +3874,71 @@ showPage = function(pageId) {
     if(pageId === 'renter') refreshMapSize(shopMap);
     if(pageId === 'home') refreshMapSize(popupMap);
 };
+
+    // ==================================
+// 주소로 위치 자동 찾기 (무료 OpenStreetMap 검색)
+// 공실 주소를 입력하고 다른 칸을 누르면 지도에 핀이 자동으로 꽂혀요.
+// 못 찾거나 위치가 틀리면 지도를 직접 눌러서 고칠 수 있어요.
+// ==================================
+
+function setPickedLocation(lat,lng) {
+    pickedLat = lat;
+    pickedLng = lng;
+
+    if(registerMarker) registerMarker.setLatLng([lat,lng]);
+    else registerMarker = L.marker([lat,lng],{ icon:emojiIcon('🏬') }).addTo(registerMap);
+}
+
+async function searchAddress(query) {
+    const response = await fetch(
+        'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&accept-language=ko&q='
+        + encodeURIComponent(query)
+    );
+    const data = await response.json();
+    return data && data[0] ? data[0] : null;
+}
+
+async function findLocationByAddress() {
+    const address = document.getElementById('vacancyAddress').value.trim();
+    const text = document.getElementById('registerMapText');
+
+    if(address.length < 2) return;
+
+    initRegisterMap();
+
+    text.textContent = '🔎 주소로 위치를 찾는 중이에요...';
+    text.className = 'help';
+
+    try {
+        let place = await searchAddress(address);
+
+        // 못 찾으면 앞에 '동해시'를 붙여서 한 번 더 찾기
+        if(!place && !address.includes('동해')) {
+            place = await searchAddress('동해시 ' + address);
+        }
+
+        if(!place) {
+            text.textContent = '주소로 위치를 못 찾았어요. 지도를 직접 눌러 위치를 찍어주세요.';
+            text.className = 'help error';
+            return;
+        }
+
+        const lat = parseFloat(place.lat);
+        const lng = parseFloat(place.lon);
+
+        setPickedLocation(lat,lng);
+        registerMap.setView([lat,lng],17);
+
+        text.textContent = '📍 주소로 위치를 찾았어요! 정확하지 않으면 지도를 눌러 고쳐주세요.';
+        text.className = 'help success';
+    } catch(error) {
+        console.error('주소 검색 오류:',error);
+        text.textContent = '주소 검색에 실패했어요. 지도를 직접 눌러 위치를 찍어주세요.';
+        text.className = 'help error';
+    }
+}
+
+document.getElementById('vacancyAddress').addEventListener('change',findLocationByAddress);
     
 // ==================================
 // 초기 실행
