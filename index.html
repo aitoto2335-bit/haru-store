@@ -471,26 +471,25 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     </div>
     
     <div class="section-box">
+        
         <form id="vacancyForm">
-            <label>점포 이름</label>
-            <input id="vacancyName" required placeholder="점포 이름">
-
-            <label>점포 주소</label>
-            <input id="vacancyAddress" required placeholder="주소">
-
+            <label>공실 주소</label>
+            <input id="vacancyAddress" required placeholder="예: 강원특별자치도 동해시 묵호진동">
+        
+            <label>공실 규모</label>
+            <input id="vacancySize" required placeholder="예: 약 20평">
+        
             <label>하루 대여료 (원)</label>
             <input id="vacancyPrice" type="number" min="0" required placeholder="예: 50000">
-
-            <label>점포 소개</label>
-            <textarea id="vacancyDescription" rows="4" placeholder="점포 소개"></textarea>
-
+        
+            <label>공실 소개</label>
+            <textarea id="vacancyDescription" rows="4"
+                placeholder="공간의 특징, 시설, 주변 환경 등을 소개해주세요."
+                required></textarea>
+        
             <label>대여 가능 시간</label>
             <input id="vacancyTime" placeholder="예: 09:00 ~ 18:00">
-            
-            <label>가게 위치</label>
-            <div id="registerMap" class="map-box small"></div>
-            <p id="registerMapText" class="help" style="margin-top:6px">지도를 눌러 가게 위치를 찍어주세요.</p>
-            
+        
             <button class="main-btn" type="submit">공실 등록하기</button>
         </form>
     </div>
@@ -1423,34 +1422,54 @@ function deleteAccount() {
 // 임대인: 공실 등록 및 관리
 // ==================================
 
+
 document.getElementById('vacancyForm').addEventListener('submit',function(event) {
     event.preventDefault();
 
     const user = getCurrentUser();
-    if(!user || user.role !== '임대인') { alert('임대인 계정으로 로그인해주세요.'); return; }
 
-    const name = document.getElementById('vacancyName').value.trim();
+    if(!user || user.role !== '임대인') {
+        alert('임대인 계정으로 로그인해주세요.');
+        return;
+    }
+
     const address = document.getElementById('vacancyAddress').value.trim();
+    const size = document.getElementById('vacancySize').value.trim();
     const price = Number(document.getElementById('vacancyPrice').value);
     const description = document.getElementById('vacancyDescription').value.trim();
     const time = document.getElementById('vacancyTime').value.trim();
 
-    if(!name || !address || !Number.isFinite(price) || price < 0) {
-        alert('점포 정보를 올바르게 입력해주세요.');
+    if(!address || !size || !description || !Number.isFinite(price) || price < 0) {
+        alert('공실 정보를 올바르게 입력해주세요.');
         return;
     }
 
     const vacancies = getVacancies();
-    vacancies.push({ id:Date.now().toString(), ownerId:user.id, name, address, price, description, time, lat:pickedLat, lng:pickedLng });
+
+    vacancies.push({
+        id: Date.now().toString(),
+        ownerId: user.id,
+        name: address,
+        address: address,
+        size: size,
+        price: price,
+        description: description,
+        time: time
+    });
+
     saveData('harugageVacancies',vacancies);
 
     this.reset();
+
     alert('공실이 등록되었습니다.');
 
     showPage('ownerDashboard');
+
     showPanel('ownerVacancies',
-        document.querySelector('#ownerDashboard .dashboard-menu button:nth-child(2)'),'owner');
+        document.querySelector('#ownerDashboard .dashboard-menu button:nth-child(2)'),
+        'owner');
 });
+
 
 function getMyVacancies() {
     const user = getCurrentUser();
@@ -1474,8 +1493,9 @@ function renderVacancies() {
 
     container.innerHTML = vacancies.map(item => `
         <div class="data-item">
-            <h3>${escapeHTML(item.name)}</h3>
-            <p>📍 ${escapeHTML(item.address)}</p>
+            <h3>${escapeHTML(item.address || item.name)}</h3>
+            <p>📍 ${escapeHTML(item.address || '주소 미입력')}</p>
+            <p>공실 규모: ${escapeHTML(item.size || '미입력')}</p>
             <p>하루 대여료: ${money(item.price)}</p>
             <p>대여 가능 시간: ${escapeHTML(item.time || '미입력')}</p>
             <p>${escapeHTML(item.description || '소개 없음')}</p>
