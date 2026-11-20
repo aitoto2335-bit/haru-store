@@ -926,15 +926,16 @@ document.getElementById('signupForm').addEventListener('submit', async function(
     }
 
     try {
-        const { data, error } = await supabaseClient.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
             email: email,
             password: password,
             options: {
+                emailRedirectTo: 'https://aitoto2335-bit.github.io/haru-store/',
                 data: {
                     nickname: nickname,
-                    full_name: name,
+                    full_name: fullName,
                     phone: phone,
-                    role: selectedRole
+                    role: role
                 }
             }
         });
