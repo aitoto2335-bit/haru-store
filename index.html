@@ -216,6 +216,7 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     .hero h1 { font-size: 28px; }
 }
 
+
 /* 커뮤니티 */
 .community-tabs {
     display: flex;
@@ -224,8 +225,7 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     margin-bottom: 18px;
 }
 
-.community-tabs button,
-.community-categories button {
+.community-tabs button {
     padding: 11px 17px;
     border: 1px solid #ddd;
     border-radius: 8px;
@@ -234,17 +234,10 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     cursor: pointer;
 }
 
-.community-tabs button.active,
-.community-categories button.active {
+.community-tabs button.active {
     background: #123F5A;
     border-color: #123F5A;
     color: white;
-}
-
-.community-categories {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 18px;
 }
 
 .community-write {
@@ -256,7 +249,7 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     border: 1px solid #eee;
     border-radius: 12px;
     padding: 20px;
-    margin-bottom: 12px;
+    margin-bottom: 15px;
 }
 
 .community-post h3 {
@@ -276,11 +269,45 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     font-size: 12px;
 }
 
-.community-post-top {
+.community-post-top,
+.community-post-actions {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.community-post-actions {
+    justify-content: flex-end;
+    margin-top: 15px;
+}
+
+.community-comments {
+    border-top: 1px solid #eee;
+    margin-top: 18px;
+    padding-top: 15px;
+}
+
+.community-comment {
+    background: #f8f8f5;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 9px 0;
+}
+
+.community-comment p {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    margin-top: 8px;
+}
+
+.community-comment-form {
+    margin-top: 15px;
+}
+
+.community-comment-form textarea {
+    margin-bottom: 8px;
 }
 
 .community-empty {
@@ -452,6 +479,7 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
 </section>
 
 
+
 <!-- 커뮤니티 -->
 <section id="community" class="page">
     <h2>하루가게 커뮤니티</h2>
@@ -461,13 +489,6 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
 
     <!-- 게시판 선택 -->
     <div id="communityBoardTabs" class="community-tabs"></div>
-
-    <!-- 전체 게시판 카테고리 -->
-    <div id="communityCategories" class="community-categories" hidden>
-        <button class="active" onclick="selectCommunityCategory('자유',this)">자유</button>
-        <button onclick="selectCommunityCategory('질문',this)">질문</button>
-        <button onclick="selectCommunityCategory('팁',this)">팁</button>
-    </div>
 
     <!-- 글 작성 -->
     <div class="section-box community-write">
@@ -3262,14 +3283,14 @@ analyzeReceiptWithAI = async function(image) {
 };
 
 
+
 // ==================================
 // 커뮤니티
 // ==================================
 
 let communityBoard = '전체';
-let communityCategory = '자유';
 
-// 현재 회원 유형에 맞는 게시판 구성
+// 현재 회원 유형에 맞는 게시판
 function getCommunityBoards() {
     const user = getCurrentUser();
 
@@ -3296,34 +3317,12 @@ function renderCommunityTabs() {
             ${board === '전체' ? '전체 게시판' : board + ' 게시판'}
         </button>
     `).join('');
-
-    document.getElementById('communityCategories').hidden =
-        communityBoard !== '전체';
 }
 
 // 게시판 선택
 function selectCommunityBoard(board) {
     communityBoard = board;
-
-    if(board === '전체') {
-        communityCategory = '자유';
-    } else {
-        communityCategory = null;
-    }
-
     renderCommunityTabs();
-    renderCommunityPosts();
-}
-
-// 전체 게시판 카테고리 선택
-function selectCommunityCategory(category, button) {
-    communityCategory = category;
-
-    document.querySelectorAll('.community-categories button')
-        .forEach(btn => btn.classList.remove('active'));
-
-    button.classList.add('active');
-
     renderCommunityPosts();
 }
 
@@ -3331,10 +3330,12 @@ function selectCommunityCategory(category, button) {
 async function renderCommunity() {
     renderCommunityTabs();
 
-    const form = document.getElementById('communityWriteForm');
     const user = getCurrentUser();
+    const button = document.querySelector(
+        '#communityWriteForm button[type="submit"]'
+    );
 
-    form.querySelector('button[type="submit"]').disabled = !user;
+    button.disabled = !user;
 
     renderCommunityPosts();
 }
@@ -3343,26 +3344,21 @@ async function renderCommunity() {
 async function renderCommunityPosts() {
     const list = document.getElementById('communityPostList');
 
-    list.innerHTML = '<div class="community-empty">게시글을 불러오는 중입니다.</div>';
+    list.innerHTML = `
+        <div class="community-empty">게시글을 불러오는 중입니다.</div>
+    `;
 
-    let query = supabaseClient
+    const { data, error } = await supabaseClient
         .from('community_posts')
         .select('*')
         .eq('board_type', communityBoard)
         .order('created_at', { ascending: false });
 
-    if(communityBoard === '전체') {
-        query = query.eq('category', communityCategory);
-    }
-
-    const { data, error } = await query;
-
     if(error) {
         console.error('게시글 조회 오류:', error);
         list.innerHTML = `
             <div class="community-empty">
-                게시글을 불러오지 못했습니다.<br>
-                잠시 후 다시 시도해주세요.
+                게시글을 불러오지 못했습니다.
             </div>
         `;
         return;
@@ -3378,32 +3374,99 @@ async function renderCommunityPosts() {
     }
 
     const user = getCurrentUser();
+    const postIds = data.map(post => post.id);
 
-    list.innerHTML = data.map(post => `
-        <article class="community-post">
-            <div class="community-post-top">
-                <span class="community-post-meta">
-                    ${escapeHTML(post.author_nickname)}
-                    · ${escapeHTML(post.author_role)}
-                </span>
+    const { data: comments, error: commentError } = await supabaseClient
+        .from('community_comments')
+        .select('*')
+        .in('post_id', postIds)
+        .order('created_at', { ascending: true });
+
+    if(commentError) {
+        console.error('댓글 조회 오류:', commentError);
+    }
+
+    const commentList = comments || [];
+
+    list.innerHTML = data.map(post => {
+        const postComments = commentList.filter(
+            comment => comment.post_id === post.id
+        );
+
+        return `
+            <article class="community-post">
+                <div class="community-post-top">
+                    <span class="community-post-meta">
+                        ${escapeHTML(post.author_nickname)}
+                        · ${escapeHTML(post.author_role)}
+                    </span>
+
+                    <span class="community-post-meta">
+                        ${new Date(post.created_at).toLocaleString('ko-KR')}
+                    </span>
+                </div>
+
+                <h3>${escapeHTML(post.title)}</h3>
+
+                <p class="community-post-content">${escapeHTML(post.content)}</p>
 
                 ${user && user.id === post.author_id ? `
-                    <button class="danger-btn"
-                        onclick="deleteCommunityPost('${post.id}')">
-                        삭제
-                    </button>
+                    <div class="community-post-actions">
+                        <button class="sub-btn"
+                            onclick="editCommunityPost('${post.id}')">
+                            수정
+                        </button>
+
+                        <button class="danger-btn"
+                            onclick="deleteCommunityPost('${post.id}')">
+                            삭제
+                        </button>
+                    </div>
                 ` : ''}
-            </div>
 
-            <h3>${escapeHTML(post.title)}</h3>
+                <div class="community-comments">
+                    <strong>댓글 ${postComments.length}개</strong>
 
-            <p class="community-post-content">${escapeHTML(post.content)}</p>
+                    ${postComments.map(comment => `
+                        <div class="community-comment">
+                            <div class="community-post-top">
+                                <span class="community-post-meta">
+                                    ${escapeHTML(comment.author_nickname)}
+                                </span>
 
-            <div class="community-post-meta">
-                ${new Date(post.created_at).toLocaleString('ko-KR')}
-            </div>
-        </article>
-    `).join('');
+                                ${user && user.id === comment.author_id ? `
+                                    <button class="danger-btn"
+                                        onclick="deleteCommunityComment('${comment.id}')">
+                                        삭제
+                                    </button>
+                                ` : ''}
+                            </div>
+
+                            <p>${escapeHTML(comment.content)}</p>
+                        </div>
+                    `).join('')}
+
+                    ${user ? `
+                        <form class="community-comment-form"
+                            onsubmit="submitCommunityComment(event, '${post.id}')">
+
+                            <textarea rows="2" maxlength="1000"
+                                placeholder="댓글을 입력하세요."
+                                required></textarea>
+
+                            <button class="sub-btn" type="submit">
+                                댓글 등록
+                            </button>
+                        </form>
+                    ` : `
+                        <p class="community-post-meta" style="margin-top:12px;">
+                            로그인하면 댓글을 작성할 수 있습니다.
+                        </p>
+                    `}
+                </div>
+            </article>
+        `;
+    }).join('');
 }
 
 // 게시글 등록
@@ -3427,8 +3490,8 @@ document.getElementById('communityWriteForm')
             return;
         }
 
-        const submitButton = this.querySelector('button[type="submit"]');
-        submitButton.disabled = true;
+        const button = this.querySelector('button[type="submit"]');
+        button.disabled = true;
 
         try {
             const { error } = await supabaseClient
@@ -3437,9 +3500,6 @@ document.getElementById('communityWriteForm')
                     author_id: user.id,
                     author_role: role,
                     board_type: communityBoard,
-                    category: communityBoard === '전체'
-                        ? communityCategory
-                        : null,
                     title: title,
                     content: content
                 });
@@ -3447,21 +3507,71 @@ document.getElementById('communityWriteForm')
             if(error) throw error;
 
             alert('게시글이 등록되었습니다.');
-
             this.reset();
             await renderCommunityPosts();
 
         } catch(error) {
             console.error('게시글 등록 오류:', error);
-            alert('게시글 등록에 실패했습니다: ' + error.message);
+            alert('게시글 등록 실패: ' + error.message);
         } finally {
-            submitButton.disabled = false;
+            button.disabled = false;
         }
     });
 
+// 게시글 수정
+async function editCommunityPost(postId) {
+    const { data: post, error } = await supabaseClient
+        .from('community_posts')
+        .select('*')
+        .eq('id', postId)
+        .single();
+
+    if(error || !post) {
+        alert('게시글을 불러오지 못했습니다.');
+        return;
+    }
+
+    const user = getCurrentUser();
+
+    if(!user || user.id !== post.author_id) {
+        alert('본인이 작성한 글만 수정할 수 있습니다.');
+        return;
+    }
+
+    const title = prompt('수정할 제목을 입력하세요.', post.title);
+
+    if(title === null) return;
+
+    const content = prompt('수정할 내용을 입력하세요.', post.content);
+
+    if(content === null) return;
+
+    if(!title.trim() || !content.trim()) {
+        alert('제목과 내용은 비워둘 수 없습니다.');
+        return;
+    }
+
+    const { error: updateError } = await supabaseClient
+        .from('community_posts')
+        .update({
+            title: title.trim(),
+            content: content.trim()
+        })
+        .eq('id', postId);
+
+    if(updateError) {
+        console.error('게시글 수정 오류:', updateError);
+        alert('게시글 수정 실패: ' + updateError.message);
+        return;
+    }
+
+    alert('게시글이 수정되었습니다.');
+    renderCommunityPosts();
+}
+
 // 게시글 삭제
 async function deleteCommunityPost(postId) {
-    if(!confirm('이 게시글을 삭제하시겠습니까?')) return;
+    if(!confirm('게시글을 삭제하시겠습니까?')) return;
 
     const { error } = await supabaseClient
         .from('community_posts')
@@ -3470,13 +3580,72 @@ async function deleteCommunityPost(postId) {
 
     if(error) {
         console.error('게시글 삭제 오류:', error);
-        alert('게시글 삭제에 실패했습니다.');
+        alert('게시글 삭제 실패: ' + error.message);
         return;
     }
 
     alert('게시글이 삭제되었습니다.');
     renderCommunityPosts();
 }
+
+// 댓글 등록
+async function submitCommunityComment(event, postId) {
+    event.preventDefault();
+
+    const user = getCurrentUser();
+
+    if(!user) {
+        alert('로그인 후 댓글을 작성할 수 있습니다.');
+        return;
+    }
+
+    const form = event.currentTarget;
+    const content = form.querySelector('textarea').value.trim();
+
+    if(!content) return;
+
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+
+    try {
+        const { error } = await supabaseClient
+            .from('community_comments')
+            .insert({
+                post_id: postId,
+                author_id: user.id,
+                content: content
+            });
+
+        if(error) throw error;
+
+        await renderCommunityPosts();
+
+    } catch(error) {
+        console.error('댓글 등록 오류:', error);
+        alert('댓글 등록 실패: ' + error.message);
+    } finally {
+        button.disabled = false;
+    }
+}
+
+// 댓글 삭제
+async function deleteCommunityComment(commentId) {
+    if(!confirm('댓글을 삭제하시겠습니까?')) return;
+
+    const { error } = await supabaseClient
+        .from('community_comments')
+        .delete()
+        .eq('id', commentId);
+
+    if(error) {
+        console.error('댓글 삭제 오류:', error);
+        alert('댓글 삭제 실패: ' + error.message);
+        return;
+    }
+
+    renderCommunityPosts();
+}
+
 
 
 // ==================================
