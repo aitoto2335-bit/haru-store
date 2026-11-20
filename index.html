@@ -399,10 +399,34 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
         <h3>회원 유형 선택</h3>
 
         <div class="role-option">
-            <button type="button" onclick="selectRole('임대인',this)">🏢<br><br>임대인</button>
-            <button type="button" onclick="selectRole('임차인',this)">🏬<br><br>임차인</button>
-            <button type="button" onclick="selectRole('방문객',this)">👤<br><br>방문객</button>
-        </div>
+    <button type="button" onclick="selectRole('임대인',this)">
+        🏢<br><br>임대인
+    </button>
+
+    <button type="button" onclick="selectRole('임차인',this)">
+        🏬<br><br>임차인
+    </button>
+
+    <button type="button" onclick="selectRole('방문객',this)">
+        👤<br><br>방문객
+    </button>
+</div>
+
+<p class="help">이용할 유형을 여러 개 선택할 수 있습니다.</p><div class="role-option">
+    <button type="button" onclick="selectRole('임대인',this)">
+        🏢<br><br>임대인
+    </button>
+
+    <button type="button" onclick="selectRole('임차인',this)">
+        🏬<br><br>임차인
+    </button>
+
+    <button type="button" onclick="selectRole('방문객',this)">
+        👤<br><br>방문객
+    </button>
+</div>
+
+<p class="help">이용할 유형을 여러 개 선택할 수 있습니다.</p>
 
         <form id="signupForm">
             <label>이메일</label>
@@ -850,12 +874,16 @@ function showPanel(panelId,button,type) {
 // 회원가입
 // ==================================
 
-let selectedRole = '';
+let selectedRoles = [];
 
-function selectRole(role,button) {
-    selectedRole = role;
-    document.querySelectorAll('.role-option button').forEach(btn => btn.classList.remove('selected'));
-    button.classList.add('selected');
+function selectRole(role, button) {
+    if(selectedRoles.includes(role)) {
+        selectedRoles = selectedRoles.filter(item => item !== role);
+        button.classList.remove('selected');
+    } else {
+        selectedRoles.push(role);
+        button.classList.add('selected');
+    }
 }
 
 document.getElementById('signupNickname').addEventListener('input',function() {
@@ -900,8 +928,8 @@ document.getElementById('signupForm').addEventListener('submit', async function(
     const password = document.getElementById('signupPassword').value;
     const phone = document.getElementById('signupPhone').value;
 
-    if(!selectedRole) {
-        alert('회원 유형을 선택해주세요.');
+    if(selectedRoles.length === 0) {
+        alert('회원 유형을 하나 이상 선택해주세요.');
         return;
     }
 
@@ -935,7 +963,9 @@ document.getElementById('signupForm').addEventListener('submit', async function(
                     nickname: nickname,
                     full_name: name,
                     phone: phone,
-                    role: selectedRole
+                    role: selectedRoles[0],
+                    roles: selectedRoles,
+                    active_role: selectedRoles[0]
                 }
             }
         });
@@ -945,7 +975,7 @@ document.getElementById('signupForm').addEventListener('submit', async function(
         alert('회원가입 요청이 완료되었습니다! 이메일 인증을 확인해주세요.');
 
         this.reset();
-        selectedRole = '';
+        selectedRoles = [];
 
         document.querySelectorAll('.role-option button').forEach(btn => {
             btn.classList.remove('selected');
@@ -992,9 +1022,17 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
         if(profileError) throw profileError;
 
         // 3. 현재 로그인 정보 저장
+        const availableRoles = Array.isArray(profile.roles) && profile.roles.length > 0
+            ? profile.roles
+            : (profile.role ? [profile.role] : []);
+        
+        const activeRole = profile.active_role || profile.role || availableRoles[0];
+        
         localStorage.setItem('harugageCurrentUser', JSON.stringify({
             id: profile.id,
-            role: profile.role,
+            role: activeRole,
+            active_role: activeRole,
+            roles: availableRoles,
             nickname: profile.nickname,
             name: profile.full_name,
             phone: profile.phone
