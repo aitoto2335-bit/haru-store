@@ -1592,97 +1592,120 @@ function updateVisitorDashboard() {
 // 방문객: 개인정보 비밀번호 확인
 // ==================================
 
-function showVisitorPrivacy(button) {
-    const user = getCurrentUser();
 
-    if(!user || user.role !== '방문객') {
-        alert('방문객 계정으로 로그인해 주세요.');
+// ==================================
+// 방문객: Supabase 개인정보 조회
+// ==================================
+
+async function getMyProfile() {
+    const { data: { user }, error: authError } =
+        await supabaseClient.auth.getUser();
+
+    if(authError || !user) {
+        alert('로그인이 필요합니다.');
+        return null;
+    }
+
+    const { data: profile, error } = await supabaseClient
+        .from('profiles')
+        .select('id, nickname, full_name, phone, role')
+        .eq('id', user.id)
+        .single();
+
+    if(error) {
+        console.error('프로필 조회 오류:', error);
+        alert('회원 정보를 불러오지 못했습니다: ' + error.message);
+        return null;
+    }
+
+    return { user, profile };
+}
+
+
+// 개인정보 메뉴 클릭
+async function showVisitorPrivacy(button) {
+    const user = await supabaseClient.auth.getUser();
+
+    if(!user.data.user) {
+        alert('로그인해 주세요.');
         return;
     }
 
-    // 다른 메뉴 숨기기
     document.querySelectorAll('.visitor-panel').forEach(panel => {
         panel.classList.remove('active');
     });
 
-    // 개인정보 메뉴 표시
     document.getElementById('visitorPrivacy').classList.add('active');
 
-    // 메뉴 버튼 선택 표시
-    button.parentElement.querySelectorAll('button').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    button.classList.add('active');
+    if(button) {
+        button.parentElement.querySelectorAll('button').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        button.classList.add('active');
+    }
 
-    const content = document.getElementById('visitorPrivacyContent');
-
-    // 비밀번호 입력 화면
-    content.innerHTML = `
+    document.getElementById('visitorPrivacyContent').innerHTML = `
         <form id="visitorPrivacyForm">
             <label>현재 비밀번호</label>
             <input id="visitorPrivacyPassword"
                 type="password" required
                 placeholder="비밀번호를 입력해 주세요.">
 
-            <p id="visitorPrivacyMessage"
-               class="form-message error"></p>
-
-            <button class="main-btn" type="submit">
-                본인 확인
-            </button>
+            <button class="main-btn" type="submit">본인 확인</button>
         </form>
     `;
 
     document.getElementById('visitorPrivacyForm')
-        .addEventListener('submit', function(event) {
+        .addEventListener('submit', async function(event) {
             event.preventDefault();
 
             const password =
                 document.getElementById('visitorPrivacyPassword').value;
 
-            const users = getData('harugageUsers');
-            const member = users.find(item => item.id === user.id);
+            const { data: { user }, error } =
+                await supabaseClient.auth.getUser();
 
-            if(!member || member.password !== password) {
-                document.getElementById('visitorPrivacyMessage')
-                    .textContent = '비밀번호가 일치하지 않습니다.';
+            if(error || !user || !user.email) {
+                alert('로그인 정보를 확인할 수 없습니다.');
                 return;
             }
 
-            showVisitorPrivacyDetails();
+            const { error: loginError } =
+                await supabaseClient.auth.signInWithPassword({
+                    email: user.email,
+                    password: password
+                });
+
+            if(loginError) {
+                alert('비밀번호가 일치하지 않습니다.');
+                return;
+            }
+
+            await showVisitorPrivacyDetails();
         });
 }
 
 
-// ==================================
-// 방문객: 개인정보 표시
-// ==================================
+// 개인정보 표시
+async function showVisitorPrivacyDetails() {
+    const result = await getMyProfile();
+    if(!result) return;
 
-function showVisitorPrivacyDetails() {
-    const user = getCurrentUser();
-    if(!user) return;
-
-    const users = getData('harugageUsers');
-    const member = users.find(item => item.id === user.id);
-
-    if(!member) {
-        alert('회원 정보를 찾을 수 없습니다.');
-        return;
-    }
+    const profile = result.profile;
 
     document.getElementById('visitorPrivacyContent').innerHTML = `
         <div class="data-item">
             <p>닉네임</p>
-            <h3>${escapeHTML(member.nickname)}</h3>
+            <h3>${escapeHTML(profile.nickname)}</h3>
 
             <p>이름</p>
-            <h3>${escapeHTML(member.name)}</h3>
+            <h3>${escapeHTML(profile.full_name)}</h3>
 
             <p>회원 유형</p>
-            <h3>${escapeHTML(member.role)}</h3>
+            <h3>${escapeHTML(profile.role)}</h3>
 
             <p>전화번호</p>
-            <h3>${escapeHTML(member.phone)}</h3>
+            <h3>${escapeHTML(profile.phone || '')}</h3>
         </div>
 
         <button class="main-btn"
@@ -1693,75 +1716,60 @@ function showVisitorPrivacyDetails() {
 }
 
 
-// ==================================
-// 방문객: 개인정보 수정 전 비밀번호 확인
-// ==================================
-
-function showVisitorPrivacyEditCheck() {
-    const user = getCurrentUser();
-    const content = document.getElementById('visitorPrivacyContent');
-
-    if(!user) {
-        alert('로그인이 필요합니다.');
-        return;
-    }
-
-    content.innerHTML = `
+// 개인정보 수정 전 비밀번호 확인
+async function showVisitorPrivacyEditCheck() {
+    document.getElementById('visitorPrivacyContent').innerHTML = `
         <h3>개인정보 수정 본인 확인</h3>
-        <p style="color:#888;font-size:13px;margin-bottom:20px">
-            개인정보를 수정하려면 현재 비밀번호를 다시 입력해 주세요.
-        </p>
+        <p>수정하려면 현재 비밀번호를 다시 입력해 주세요.</p>
 
         <form id="visitorEditPasswordForm">
             <label>현재 비밀번호</label>
             <input id="visitorEditPassword"
-                type="password" required
-                placeholder="비밀번호 입력">
-
-            <p id="visitorEditPasswordMessage"
-               class="form-message error"></p>
+                type="password" required>
 
             <button class="main-btn" type="submit">확인</button>
             <button class="sub-btn" type="button"
-                onclick="showVisitorPrivacyDetails()">
-                취소
-            </button>
+                onclick="showVisitorPrivacyDetails()">취소</button>
         </form>
     `;
 
     document.getElementById('visitorEditPasswordForm')
-        .addEventListener('submit', function(event) {
+        .addEventListener('submit', async function(event) {
             event.preventDefault();
 
             const password =
                 document.getElementById('visitorEditPassword').value;
 
-            const users = getData('harugageUsers');
-            const member = users.find(item => item.id === user.id);
+            const { data: { user }, error } =
+                await supabaseClient.auth.getUser();
 
-            if(!member || member.password !== password) {
-                document.getElementById('visitorEditPasswordMessage')
-                    .textContent = '비밀번호가 일치하지 않습니다.';
+            if(error || !user || !user.email) {
+                alert('로그인 정보를 확인할 수 없습니다.');
                 return;
             }
 
-            showVisitorPrivacyEditForm();
+            const { error: loginError } =
+                await supabaseClient.auth.signInWithPassword({
+                    email: user.email,
+                    password: password
+                });
+
+            if(loginError) {
+                alert('비밀번호가 일치하지 않습니다.');
+                return;
+            }
+
+            await showVisitorPrivacyEditForm();
         });
 }
 
 
-// ==================================
-// 방문객: 개인정보 수정 화면
-// ==================================
+// 개인정보 수정 화면
+async function showVisitorPrivacyEditForm() {
+    const result = await getMyProfile();
+    if(!result) return;
 
-function showVisitorPrivacyEditForm() {
-    const user = getCurrentUser();
-    if(!user) return;
-
-    const users = getData('harugageUsers');
-    const member = users.find(item => item.id === user.id);
-
-    if(!member) return;
+    const profile = result.profile;
 
     document.getElementById('visitorPrivacyContent').innerHTML = `
         <h3>개인정보 수정</h3>
@@ -1769,45 +1777,28 @@ function showVisitorPrivacyEditForm() {
         <form id="visitorEditForm">
             <label>닉네임</label>
             <input id="visitorEditNickname"
-                value="${escapeHTML(member.nickname)}" required>
+                value="${escapeHTML(profile.nickname)}" required>
 
             <label>이름</label>
             <input id="visitorEditName"
-                value="${escapeHTML(member.name)}" required>
+                value="${escapeHTML(profile.full_name)}" required>
 
             <label>회원 유형</label>
-            <input value="${escapeHTML(member.role)}" disabled>
+            <input value="${escapeHTML(profile.role)}" disabled>
 
             <label>전화번호</label>
             <input id="visitorEditPhone"
                 type="tel" maxlength="13"
-                value="${escapeHTML(member.phone)}" required>
+                value="${escapeHTML(profile.phone || '')}" required>
 
             <button class="main-btn" type="submit">수정 완료</button>
             <button class="sub-btn" type="button"
-                onclick="showVisitorPrivacyDetails()">
-                취소
-            </button>
+                onclick="showVisitorPrivacyDetails()">취소</button>
         </form>
     `;
 
-    // 전화번호 자동 하이픈
-    document.getElementById('visitorEditPhone')
-        .addEventListener('input', function() {
-            const number = this.value.replace(/\D/g, '').slice(0, 11);
-
-            if(number.length > 7) {
-                this.value = number.slice(0, 3) + '-' +
-                    number.slice(3, 7) + '-' + number.slice(7);
-            } else if(number.length > 3) {
-                this.value = number.slice(0, 3) + '-' + number.slice(3);
-            } else {
-                this.value = number;
-            }
-        });
-
     document.getElementById('visitorEditForm')
-        .addEventListener('submit', function(event) {
+        .addEventListener('submit', async function(event) {
             event.preventDefault();
 
             const nickname =
@@ -1817,25 +1808,9 @@ function showVisitorPrivacyEditForm() {
             const phone =
                 document.getElementById('visitorEditPhone').value.trim();
 
-            const latestUsers = getData('harugageUsers');
-            const index = latestUsers.findIndex(item => item.id === user.id);
-
-            if(index === -1) {
-                alert('회원 정보를 찾을 수 없습니다.');
-                return;
-            }
-
             if(nickname.length < 2 ||
                !/^[a-zA-Z0-9가-힣]+$/.test(nickname)) {
                 alert('닉네임은 2글자 이상, 한글·영어·숫자만 사용할 수 있습니다.');
-                return;
-            }
-
-            if(latestUsers.some(item =>
-                item.id !== user.id &&
-                item.nickname.toLowerCase() === nickname.toLowerCase()
-            )) {
-                alert('이미 사용 중인 닉네임입니다.');
                 return;
             }
 
@@ -1849,33 +1824,25 @@ function showVisitorPrivacyEditForm() {
                 return;
             }
 
-            // 회원 정보 저장
-            latestUsers[index].nickname = nickname;
-            latestUsers[index].name = name;
-            latestUsers[index].phone = phone;
+            const { error } = await supabaseClient
+                .from('profiles')
+                .update({
+                    nickname: nickname,
+                    full_name: name,
+                    phone: phone
+                })
+                .eq('id', profile.id);
 
-            saveData('harugageUsers', latestUsers);
+            if(error) {
+                console.error('개인정보 수정 오류:', error);
+                alert('수정 실패: ' + error.message);
+                return;
+            }
 
-            // 로그인 정보도 갱신
-            const updatedUser = {
-                ...user,
-                nickname,
-                name,
-                phone
-            };
-
-            localStorage.setItem(
-                'harugageCurrentUser',
-                JSON.stringify(updatedUser)
-            );
-
-            alert('개인정보가 수정되었습니다.');
-
-            updateVisitorDashboard();
-            showVisitorPrivacyDetails();
+            alert('개인정보가 수정되었습니다!');
+            await showVisitorPrivacyDetails();
         });
 }
-
 
 // ==================================
 // 방문객: 영수증 촬영 (카메라)
