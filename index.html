@@ -1483,9 +1483,13 @@ document.getElementById('vacancyForm').addEventListener('submit', async function
     const { data, error } = await supabaseClient
         .from('vacancies')
         .insert([{
-            owner_id: user.id,
-            address: address,
-            size: size,
+        owner_id: user.id,
+        name: address,
+        address: address,
+        size: size,
+        price: price,
+        description: description,
+        available_time: time
             price: price,
             description: description,
             available_time: time
