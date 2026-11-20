@@ -911,9 +911,39 @@ function getCurrentUser() {
     return JSON.parse(localStorage.getItem('harugageCurrentUser') || 'null');
 }
 
+
+let vacanciesCache = [];
+
 function getVacancies() {
-    return getData('harugageVacancies');
+    return vacanciesCache;
 }
+
+async function loadVacancies() {
+    const { data, error } = await supabaseClient
+        .from('vacancies')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if(error) {
+        console.error('공실 불러오기 오류:', error);
+        alert('공실 정보를 불러오지 못했습니다.');
+        return;
+    }
+
+    vacanciesCache = (data || []).map(item => ({
+    ...item,
+    ownerId: item.owner_id,
+    name: item.address,
+    time: item.available_time || ''
+}));
+
+    renderShopList();
+    renderVacancies();
+
+    const homeList = document.getElementById('homeVacancies');
+    if(homeList) renderHome();
+}
+
 
 function getCurrentUserItems(key) {
     const user = getCurrentUser();
@@ -1423,7 +1453,8 @@ function deleteAccount() {
 // ==================================
 
 
-document.getElementById('vacancyForm').addEventListener('submit',function(event) {
+
+document.getElementById('vacancyForm').addEventListener('submit', async function(event) {
     event.preventDefault();
 
     const user = getCurrentUser();
@@ -1444,31 +1475,39 @@ document.getElementById('vacancyForm').addEventListener('submit',function(event)
         return;
     }
 
-    const vacancies = getVacancies();
+    const { data, error } = await supabaseClient
+        .from('vacancies')
+        .insert([{
+            owner_id: user.id,
+            address: address,
+            size: size,
+            price: price,
+            description: description,
+            available_time: time
+        }])
+        .select()
+        .single();
 
-    vacancies.push({
-        id: Date.now().toString(),
-        ownerId: user.id,
-        name: address,
-        address: address,
-        size: size,
-        price: price,
-        description: description,
-        time: time
-    });
-
-    saveData('harugageVacancies',vacancies);
-
-    this.reset();
+    if(error) {
+        console.error('공실 등록 오류:', error);
+        alert('공실 등록에 실패했습니다: ' + error.message);
+        return;
+    }
 
     alert('공실이 등록되었습니다.');
 
-    showPage('ownerDashboard');
+    this.reset();
 
-    showPanel('ownerVacancies',
+    await loadVacancies();
+
+    showPage('ownerDashboard');
+    showPanel(
+        'ownerVacancies',
         document.querySelector('#ownerDashboard .dashboard-menu button:nth-child(2)'),
-        'owner');
+        'owner'
+    );
 });
+
 
 
 function getMyVacancies() {
@@ -1504,15 +1543,24 @@ function renderVacancies() {
     `).join('');
 }
 
-function deleteVacancy(id) {
+
+async function deleteVacancy(id) {
     if(!confirm('공실을 삭제하시겠습니까?')) return;
 
-    const user = getCurrentUser();
-    saveData('harugageVacancies',getVacancies().filter(item =>
-        !(item.id === id && item.ownerId === user.id)
-    ));
+    const { error } = await supabaseClient
+        .from('vacancies')
+        .delete()
+        .eq('id', id);
 
+    if(error) {
+        console.error('공실 삭제 오류:', error);
+        alert('공실 삭제에 실패했습니다: ' + error.message);
+        return;
+    }
+
+    await loadVacancies();
     updateOwnerDashboard();
+
     alert('공실이 삭제되었습니다.');
 }
 
@@ -4073,6 +4121,8 @@ document.getElementById('vacancyAddress').addEventListener('change',findLocation
 // ==================================
 
 showPage('home');
+// Supabase에 저장된 공실 정보 불러오기
+loadVacancies();
 </script>
 </body>
 </html>
