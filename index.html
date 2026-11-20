@@ -405,6 +405,13 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
         </div>
 
         <form id="signupForm">
+            <label>이메일</label>
+            <input
+                id="signupEmail"
+                type="email"
+                required
+                placeholder="example@email.com"
+            >
             <label>닉네임</label>
             <input id="signupNickname" required placeholder="2글자 이상">
             <p class="help">한글, 영어, 숫자만 사용 가능하며 특수문자는 사용할 수 없습니다.</p>
@@ -884,29 +891,29 @@ document.getElementById('signupPhone').addEventListener('input',function() {
     }
 });
 
-document.getElementById('signupForm').addEventListener('submit',function(event) {
+document.getElementById('signupForm').addEventListener('submit', async function(event) {
     event.preventDefault();
 
+    const email = document.getElementById('signupEmail').value.trim();
     const nickname = document.getElementById('signupNickname').value.trim();
     const name = document.getElementById('signupName').value.trim();
     const password = document.getElementById('signupPassword').value;
     const phone = document.getElementById('signupPhone').value;
 
-    if(!selectedRole) { alert('회원 유형을 선택해주세요.'); return; }
+    if(!selectedRole) {
+        alert('회원 유형을 선택해주세요.');
+        return;
+    }
 
     if(nickname.length < 2 || !/^[a-zA-Z0-9가-힣]+$/.test(nickname)) {
         alert('닉네임을 올바르게 입력해주세요.');
         return;
     }
 
-    const users = getUsers();
-
-    if(users.some(user => user.nickname.toLowerCase() === nickname.toLowerCase())) {
-        alert('이미 사용 중인 닉네임입니다.');
+    if(!name) {
+        alert('본명을 입력해주세요.');
         return;
     }
-
-    if(!name) { alert('본명을 입력해주세요.'); return; }
 
     if(password.length < 8 || !/^[a-zA-Z0-9!?*]+$/.test(password)) {
         alert('비밀번호는 8자 이상이며 영어, 숫자, ! ? * 만 사용할 수 있습니다.');
@@ -918,20 +925,40 @@ document.getElementById('signupForm').addEventListener('submit',function(event) 
         return;
     }
 
-    users.push({ id:Date.now().toString(), role:selectedRole, nickname, name, password, phone });
-    saveData('harugageUsers',users);
+    try {
+        const { data, error } = await supabaseClient.auth.signUp({
+            email: email,
+            password: password,
+            options: {
+                data: {
+                    nickname: nickname,
+                    full_name: name,
+                    phone: phone,
+                    role: selectedRole
+                }
+            }
+        });
 
-    alert('회원가입이 완료되었습니다!');
+        if(error) throw error;
 
-    this.reset();
-    selectedRole = '';
-    document.querySelectorAll('.role-option button').forEach(btn => btn.classList.remove('selected'));
-    document.getElementById('nicknameMessage').textContent = '';
+        alert('회원가입 요청이 완료되었습니다! 이메일 인증을 확인해주세요.');
 
-    showPage('login');
-    document.getElementById('loginNickname').value = nickname;
+        this.reset();
+        selectedRole = '';
+
+        document.querySelectorAll('.role-option button').forEach(btn => {
+            btn.classList.remove('selected');
+        });
+
+        document.getElementById('nicknameMessage').textContent = '';
+
+        showPage('login');
+
+    } catch(error) {
+        console.error('회원가입 오류:', error);
+        alert('회원가입 실패: ' + error.message);
+    }
 });
-
 
 // ==================================
 // 로그인 및 마이페이지
