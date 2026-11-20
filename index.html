@@ -8,7 +8,19 @@
 <title>하루가게</title>
 
 <link rel="icon" type="image/png" href="harugage-icon.png.png">
-
+<!-- 지도 (Leaflet + OpenStreetMap, 무료) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+.map-box { position: relative; z-index: 0; height: 380px; border-radius: 14px; border: 1px solid #eee; margin-bottom: 20px; }
+.map-box.small { height: 280px; margin: 9px 0 6px; }
+.map-pin { background: none; border: none; }
+.map-pin-inner {
+    width: 36px; height: 36px; border-radius: 50%; background: white; border: 2px solid #426b50;
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+</style>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: Arial, sans-serif; background: #f8f8f5; color: #292d27; }
@@ -348,6 +360,7 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
         <button class="main-btn" onclick="showPage('renter')">공실 둘러보기 →</button>
     </div>
         <h2>지금 열리는 팝업 🎪</h2>
+    <div id="popupMap" class="map-box"></div>
     <div id="homePopups" class="cards" style="margin-bottom:35px"></div>
     <h2>오늘의 추천 공실</h2>
     <div id="homeVacancies" class="cards"></div>
@@ -374,6 +387,7 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     </select>
     <button class="main-btn" onclick="renderShopList()">공실 검색</button>
 </div>
+    <div id="shopMap" class="map-box"></div>
     <div id="shopList" class="cards"></div>
 </section>
 
@@ -472,7 +486,11 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
 
             <label>대여 가능 시간</label>
             <input id="vacancyTime" placeholder="예: 09:00 ~ 18:00">
-
+            
+            <label>가게 위치</label>
+            <div id="registerMap" class="map-box small"></div>
+            <p id="registerMapText" class="help" style="margin-top:6px">지도를 눌러 가게 위치를 찍어주세요.</p>
+            
             <button class="main-btn" type="submit">공실 등록하기</button>
         </form>
     </div>
@@ -1429,7 +1447,7 @@ document.getElementById('vacancyForm').addEventListener('submit',function(event)
     }
 
     const vacancies = getVacancies();
-    vacancies.push({ id:Date.now().toString(), ownerId:user.id, name, address, price, description, time });
+    vacancies.push({ id:Date.now().toString(), ownerId:user.id, name, address, price, description, time, lat:pickedLat, lng:pickedLng });
     saveData('harugageVacancies',vacancies);
 
     this.reset();
@@ -3647,7 +3665,216 @@ async function deleteCommunityComment(commentId) {
 }
 
 
+// ==================================
+// 지도 (무료 OpenStreetMap + Leaflet)
+// ① 점포 등록할 때 지도에서 위치 찍기
+// ② 점포 찾기 지도
+// ③ 홈 화면 팝업 지도 (스탬프 받은 곳은 ✅)
+// ==================================
 
+const MAP_CENTER = [37.5247,129.1143];   // 동해시 중심
+const MAP_ZOOM = 13;
+
+let pickedLat = null;
+let pickedLng = null;
+let registerMap = null;
+let registerMarker = null;
+let shopMap = null;
+let shopMapLayer = null;
+let popupMap = null;
+let popupMapLayer = null;
+
+function createMap(elementId) {
+    const map = L.map(elementId).setView(MAP_CENTER,MAP_ZOOM);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+        maxZoom:19,
+        attribution:'&copy; OpenStreetMap'
+    }).addTo(map);
+    return map;
+}
+
+function emojiIcon(emoji) {
+    return L.divIcon({
+        className:'map-pin',
+        html:'<div class="map-pin-inner">'+emoji+'</div>',
+        iconSize:[36,36],
+        iconAnchor:[18,36],
+        popupAnchor:[0,-34]
+    });
+}
+
+function hasLocation(shop) {
+    return shop && typeof shop.lat === 'number' && typeof shop.lng === 'number';
+}
+
+// 숨겨져 있던 지도가 화면에 나타나면 크기를 다시 계산
+function refreshMapSize(map) {
+    if(map) setTimeout(() => map.invalidateSize(),100);
+}
+
+// 여러 핀이 있으면 모두 보이게 화면 맞추기
+function fitToMarkers(map,points) {
+    if(points.length === 1) map.setView(points[0],15);
+    else if(points.length > 1) map.fitBounds(points,{ padding:[40,40] });
+    else map.setView(MAP_CENTER,MAP_ZOOM);
+}
+
+// ---------- ① 점포 등록: 위치 찍기 ----------
+
+function initRegisterMap() {
+    if(!document.getElementById('registerMap')) return;
+
+    if(!registerMap) {
+        registerMap = createMap('registerMap');
+
+        registerMap.on('click',function(event) {
+            pickedLat = event.latlng.lat;
+            pickedLng = event.latlng.lng;
+
+            if(registerMarker) registerMarker.setLatLng(event.latlng);
+            else registerMarker = L.marker(event.latlng,{ icon:emojiIcon('🏬') }).addTo(registerMap);
+
+            document.getElementById('registerMapText').textContent = '📍 위치가 선택됐어요!';
+            document.getElementById('registerMapText').className = 'help success';
+        });
+    }
+
+    refreshMapSize(registerMap);
+}
+
+// 점포 등록이 끝나서 폼이 초기화되면 찍은 위치도 초기화
+document.getElementById('vacancyForm').addEventListener('reset',function() {
+    pickedLat = null;
+    pickedLng = null;
+
+    if(registerMarker) {
+        registerMarker.remove();
+        registerMarker = null;
+    }
+
+    document.getElementById('registerMapText').textContent = '지도를 눌러 가게 위치를 찍어주세요.';
+    document.getElementById('registerMapText').className = 'help';
+});
+
+// ---------- ② 점포 찾기 지도 ----------
+
+function updateShopMap(shops) {
+    if(!document.getElementById('shopMap')) return;
+
+    if(!shopMap) {
+        shopMap = createMap('shopMap');
+        shopMapLayer = L.layerGroup().addTo(shopMap);
+    }
+
+    shopMapLayer.clearLayers();
+
+    const points = [];
+
+    shops.filter(hasLocation).forEach(shop => {
+        points.push([shop.lat,shop.lng]);
+
+        L.marker([shop.lat,shop.lng],{ icon:emojiIcon('🏬') })
+            .bindPopup(`
+                <strong>${escapeHTML(shop.name)}</strong><br>
+                ${escapeHTML(shop.address)}<br>
+                하루 ${money(shop.price)}<br>
+                <button class="main-btn" style="margin-top:8px;padding:8px 12px" onclick="openRent('${shop.id}')">이 점포 빌리기</button>
+            `)
+            .addTo(shopMapLayer);
+    });
+
+    fitToMarkers(shopMap,points);
+    refreshMapSize(shopMap);
+}
+
+const renderShopListWithoutMap = renderShopList;
+
+renderShopList = function() {
+    renderShopListWithoutMap();
+
+    const keyword = document.getElementById('searchKeyword').value.trim().toLowerCase();
+    const area = document.getElementById('searchArea').value;
+
+    const shops = getVacancies().filter(item => {
+        const text = (item.name+' '+item.address+' '+(item.description || '')).toLowerCase();
+        if(keyword && !text.includes(keyword)) return false;
+        if(area && !String(item.address).includes(area)) return false;
+        return true;
+    });
+
+    updateShopMap(shops);
+};
+
+// ---------- ③ 홈 화면 팝업 지도 ----------
+
+function updatePopupMap() {
+    if(!document.getElementById('popupMap')) return;
+
+    if(!popupMap) {
+        popupMap = createMap('popupMap');
+        popupMapLayer = L.layerGroup().addTo(popupMap);
+    }
+
+    popupMapLayer.clearLayers();
+
+    const today = todayStr();
+    const user = getCurrentUser();
+    const myStamps = user ? getData('harugageStamps').filter(item => item.userId === user.id) : [];
+    const shops = getVacancies();
+    const points = [];
+
+    getActivePopups()
+        .filter(item => item.endDate >= today)
+        .forEach(item => {
+            const shop = shops.find(v => v.id === item.vacancyId);
+            if(!hasLocation(shop)) return;
+
+            const isOpen = item.startDate <= today;
+            const visited = myStamps.some(stamp => stamp.shopId === shop.id);
+            const emoji = visited ? '✅' : (isOpen ? '🔥' : '🎪');
+
+            points.push([shop.lat,shop.lng]);
+
+            L.marker([shop.lat,shop.lng],{ icon:emojiIcon(emoji) })
+                .bindPopup(`
+                    <strong>${escapeHTML(item.popupName)}</strong><br>
+                    ${isOpen ? '🔥 진행 중' : 'D-'+calculateDday(item.startDate)+' 오픈 예정'}
+                    ${visited ? ' · ✅ 방문 완료' : ''}<br>
+                    📍 ${escapeHTML(shop.name)}<br>
+                    📅 ${escapeHTML(item.startDate)} ~ ${escapeHTML(item.endDate)}
+                    ${shop.time ? '<br>🕘 '+escapeHTML(shop.time) : ''}
+                `)
+                .addTo(popupMapLayer);
+        });
+
+    fitToMarkers(popupMap,points);
+    refreshMapSize(popupMap);
+}
+
+const renderPopupsWithoutMap = renderPopups;
+
+renderPopups = function() {
+    renderPopupsWithoutMap();
+    updatePopupMap();
+};
+
+// ---------- 화면이 바뀔 때 지도 크기 다시 맞추기 ----------
+
+const showPageWithoutMap = showPage;
+
+showPage = function(pageId) {
+    showPageWithoutMap(pageId);
+
+    // 공실 목록이 숨겨지면(임차인이 아니면) 지도도 같이 숨기기
+    const shopMapBox = document.getElementById('shopMap');
+    const shopListBox = document.getElementById('shopList');
+    if(shopMapBox && shopListBox) shopMapBox.hidden = shopListBox.hidden;
+
+    if(pageId === 'owner') initRegisterMap();
+    if(pageId === 'renter') refreshMapSize(shopMap);
+    if(pageId === 'home') refreshMapSize(popupMap);
+};
+    
 // ==================================
 // 초기 실행
 // ==================================
