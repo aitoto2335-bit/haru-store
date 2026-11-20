@@ -238,19 +238,33 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
 
 <!-- 점포 찾기 -->
 <section id="renter" class="page">
-    <h2>나에게 맞는 점포 찾기</h2>
-    <div class="section-box">
-        <label>점포 이름 또는 주소 검색</label>
-        <input id="searchKeyword" placeholder="예: 묵호, 카페">
+    <h2>나에게 맞는 공실 찾기</h2>
+<div class="section-box">
+    <label>공실 이름 또는 주소 검색</label>
+    <input id="searchKeyword" placeholder="예: 묵호, 카페">
 
-        <label>희망 지역</label>
-        <select id="searchArea">
-            <option value="">전체 지역</option>
-            <option>묵호동</option>
-            <option>천곡동</option>
-            <option>발한동</option>
-        </select>
-        <button class="main-btn" onclick="renderShopList()">점포 검색</button>
+    <label>희망 지역</label>
+    <select id="searchArea">
+        <option value="">전체 지역</option>
+        <option>묵호동</option>
+        <option>천곡동</option>
+        <option>발한동</option>
+    </select>
+    <button class="main-btn" onclick="renderShopList()">공실 검색</button>
+</div><h2>나에게 맞는 공실 찾기</h2>
+<div class="section-box">
+    <label>공실 이름 또는 주소 검색</label>
+    <input id="searchKeyword" placeholder="예: 묵호, 카페">
+
+    <label>희망 지역</label>
+    <select id="searchArea">
+        <option value="">전체 지역</option>
+        <option>묵호동</option>
+        <option>천곡동</option>
+        <option>발한동</option>
+    </select>
+    <button class="main-btn" onclick="renderShopList()">공실 검색</button>
+</div>
     </div>
     <div id="shopList" class="cards"></div>
 </section>
@@ -329,7 +343,7 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
 <!-- 점포 등록 -->
 <section id="owner" class="page">
     <button class="back-btn" onclick="showPage('mypage')">← 마이페이지</button>
-    <h2>내 빈 점포 등록하기</h2>
+    <h2>내 공실 등록하기</h2>
 
     <div class="section-box">
         <form id="vacancyForm">
@@ -348,7 +362,7 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
             <label>대여 가능 시간</label>
             <input id="vacancyTime" placeholder="예: 09:00 ~ 18:00">
 
-            <button class="main-btn" type="submit">점포 등록하기</button>
+            <button class="main-btn" type="submit">공실 등록하기</button>
         </form>
     </div>
 </section>
@@ -739,8 +753,69 @@ function escapeHTML(value) {
 // ==================================
 
 function showPage(pageId) {
-    document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+
+    // 현재 로그인한 회원 확인
+    const user = getCurrentUser();
+
+    // 공실 찾기는 임차인만 이용 가능
+    if(pageId === 'renter') {
+        if(!user || user.role !== '임차인') {
+            alert('임차인만 사용할 수 있는 페이지입니다.');
+            return;
+        }
+    }
+
+    // 공실 등록은 임대인만 이용 가능
+    if(pageId === 'owner') {
+        if(!user || user.role !== '임대인') {
+            alert('임대인만 사용할 수 있는 페이지입니다.');
+            return;
+        }
+    }
+
+    // 기존 페이지 이동 기능
+    document.querySelectorAll('.page').forEach(page => {
+        page.classList.remove('active');
+    });
+
     document.getElementById(pageId).classList.add('active');
+
+    window.scrollTo(0,0);
+
+    if(pageId === 'mypage') updateMypage();
+    if(pageId === 'ownerDashboard') updateOwnerDashboard();
+    if(pageId === 'tenantDashboard') updateTenantDashboard();
+    if(pageId === 'visitorDashboard') updateVisitorDashboard();
+    if(pageId === 'home') renderHome();
+    if(pageId === 'renter') renderShopList();
+}function showPage(pageId) {
+
+    // 현재 로그인한 회원 확인
+    const user = getCurrentUser();
+
+    // 공실 찾기는 임차인만 이용 가능
+    if(pageId === 'renter') {
+        if(!user || user.role !== '임차인') {
+            alert('임차인만 사용할 수 있는 페이지입니다.');
+            return;
+        }
+    }
+
+    // 공실 등록은 임대인만 이용 가능
+    if(pageId === 'owner') {
+        if(!user || user.role !== '임대인') {
+            alert('임대인만 사용할 수 있는 페이지입니다.');
+            return;
+        }
+    }
+
+    // 기존 페이지 이동 기능
+    document.querySelectorAll('.page').forEach(page => {
+        page.classList.remove('active');
+    });
+
+    document.getElementById(pageId).classList.add('active');
+
     window.scrollTo(0,0);
 
     if(pageId === 'mypage') updateMypage();
