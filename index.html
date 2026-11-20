@@ -480,6 +480,18 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
             </p>
             
             <div id="registerMap" class="map-box small"></div>
+
+            <label>공실 이미지</label>
+            <input
+                id="vacancyImages"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+            >
+            <p class="help">
+                공실 사진을 최대 5장까지 등록할 수 있어요.
+                JPG, PNG, WEBP 형식을 지원합니다.
+            </p>
         
             <label>공실 규모</label>
             <input id="vacancySize" required placeholder="예: 약 20평">
@@ -1489,6 +1501,7 @@ function deleteAccount() {
 
 
 document.getElementById('vacancyForm').addEventListener('submit', async function(event) {
+document.getElementById('vacancyForm').addEventListener('submit', async function(event) {
     event.preventDefault();
 
     const user = getCurrentUser();
@@ -1504,48 +1517,124 @@ document.getElementById('vacancyForm').addEventListener('submit', async function
     const description = document.getElementById('vacancyDescription').value.trim();
     const time = document.getElementById('vacancyTime').value.trim();
 
+    const imageFiles = Array.from(
+        document.getElementById('vacancyImages').files
+    );
+
     if(!address || !size || !description || !Number.isFinite(price) || price < 0) {
         alert('공실 정보를 올바르게 입력해주세요.');
         return;
     }
 
-    const { data, error } = await supabaseClient
-        .from('vacancies')
-        .insert([{
-            owner_id: user.id,
-            name: address,
-            address: address,
-            size: size,
-            price: price,
-            description: description,
-            time: time,
-            available_time: time,
-            lat: pickedLat,
-            lng: pickedLng
-        }])
-        .select()
-        .single();
-
-    if(error) {
-        console.error('공실 등록 오류:', error);
-        alert('공실 등록에 실패했습니다: ' + error.message);
+    if(pickedLat === null || pickedLng === null) {
+        alert('지도에서 공실 위치를 먼저 선택해주세요.');
         return;
     }
 
-    alert('공실이 등록되었습니다.');
+    if(imageFiles.length > 5) {
+        alert('공실 이미지는 최대 5장까지 등록할 수 있습니다.');
+        return;
+    }
 
-    this.reset();
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
 
-    await loadVacancies();
+    for(const file of imageFiles) {
+        if(!allowedTypes.includes(file.type)) {
+            alert('JPG, PNG, WEBP 이미지 파일만 등록할 수 있습니다.');
+            return;
+        }
 
-    showPage('ownerDashboard');
-    showPanel(
-        'ownerVacancies',
-        document.querySelector('#ownerDashboard .dashboard-menu button:nth-child(2)'),
-        'owner'
-    );
+        if(file.size > 5 * 1024 * 1024) {
+            alert('이미지 한 장당 5MB 이하로 등록해주세요.');
+            return;
+        }
+    }
+
+    const uploadedPaths = [];
+    const imageUrls = [];
+
+    try {
+        // 1. 사진을 Supabase Storage에 업로드
+        for(let i = 0; i < imageFiles.length; i++) {
+            const file = imageFiles[i];
+
+            const extension = {
+                'image/jpeg': 'jpg',
+                'image/png': 'png',
+                'image/webp': 'webp'
+            }[file.type];
+
+            const filePath =
+                user.id + '/' + crypto.randomUUID() + '.' + extension;
+
+            const { data: uploadData, error: uploadError } =
+                await supabaseClient.storage
+                    .from('vacancy-images')
+                    .upload(filePath, file, {
+                        contentType: file.type,
+                        upsert: false
+                    });
+
+            if(uploadError) throw uploadError;
+
+            uploadedPaths.push(uploadData.path);
+
+            const { data: publicData } =
+                supabaseClient.storage
+                    .from('vacancy-images')
+                    .getPublicUrl(uploadData.path);
+
+            imageUrls.push(publicData.publicUrl);
+        }
+
+        // 2. 공실 정보와 지도 좌표, 이미지 URL을 DB에 저장
+        const { data, error } = await supabaseClient
+            .from('vacancies')
+            .insert([{
+                owner_id: user.id,
+                name: address,
+                address: address,
+                size: size,
+                price: price,
+                description: description,
+                time: time,
+                available_time: time,
+                lat: pickedLat,
+                lng: pickedLng,
+                image_urls: imageUrls
+            }])
+            .select()
+            .single();
+
+        if(error) throw error;
+
+        alert('공실과 이미지가 등록되었습니다!');
+
+        this.reset();
+
+        await loadVacancies();
+
+        showPage('ownerDashboard');
+
+        showPanel(
+            'ownerVacancies',
+            document.querySelector('#ownerDashboard .dashboard-menu button:nth-child(2)'),
+            'owner'
+        );
+
+    } catch(error) {
+        console.error('공실 등록 오류:', error);
+
+        // DB 저장에 실패하면 방금 올린 이미지도 정리
+        if(uploadedPaths.length > 0) {
+            await supabaseClient.storage
+                .from('vacancy-images')
+                .remove(uploadedPaths);
+        }
+
+        alert('공실 등록에 실패했습니다: ' + error.message);
+    }
 });
-
 
 
 function getMyVacancies() {
@@ -2729,7 +2818,15 @@ function renderHome() {
 
     container.innerHTML = vacancies.slice(0,6).map(item => `
         <div class="card">
-            <div class="card-image">점포 이미지</div>
+            <div class="card-image" style="height:180px;overflow:hidden;">
+    ${
+        item.image_urls && item.image_urls.length
+            ? `<img src="${escapeHTML(item.image_urls[0])}"
+                   alt="공실 이미지"
+                   style="width:100%;height:100%;object-fit:cover;">`
+            : '등록된 이미지 없음'
+    }
+</div>
             <div class="card-content">
                 <h3>${escapeHTML(item.name)}</h3>
                 <p>위치: ${escapeHTML(item.address)}</p>
