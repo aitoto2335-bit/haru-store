@@ -2070,6 +2070,100 @@ async function getMyProfile() {
 }
 
 
+// ==================================
+// 방문객 개인정보 관리
+// ==================================
+
+async function showVisitorPrivacy(button) {
+    const panel = document.getElementById('visitorPrivacy');
+    const content = document.getElementById('visitorPrivacyContent');
+
+    // 개인정보 패널 먼저 표시
+    document.querySelectorAll('.visitor-panel').forEach(item => {
+        item.classList.remove('active');
+    });
+
+    panel.classList.add('active');
+
+    // 메뉴 버튼 활성화
+    if(button) {
+        button.parentElement.querySelectorAll('button').forEach(item => {
+            item.classList.remove('active');
+        });
+        button.classList.add('active');
+    }
+
+    // 비밀번호 확인 화면
+    content.innerHTML = `
+        <form id="visitorPrivacyForm">
+            <label>현재 비밀번호</label>
+            <input
+                id="visitorPrivacyPassword"
+                type="password"
+                autocomplete="current-password"
+                required
+                placeholder="비밀번호를 입력해 주세요."
+            >
+            <button class="main-btn" type="submit">본인 확인</button>
+        </form>
+    `;
+
+    try {
+        const { data: { user }, error } =
+            await supabaseClient.auth.getUser();
+
+        if(error || !user || !user.email) {
+            content.innerHTML = '<p>로그인 정보를 확인할 수 없습니다.</p>';
+            return;
+        }
+
+        document.getElementById('visitorPrivacyForm')
+            .addEventListener('submit', async function(event) {
+                event.preventDefault();
+
+                const password = document
+                    .getElementById('visitorPrivacyPassword').value;
+
+                const { error: loginError } =
+                    await supabaseClient.auth.signInWithPassword({
+                        email: user.email,
+                        password: password
+                    });
+
+                if(loginError) {
+                    alert('비밀번호가 일치하지 않습니다.');
+                    return;
+                }
+
+                const result = await getMyProfile();
+                if(!result) return;
+
+                const profile = result.profile;
+
+                content.innerHTML = `
+                    <div class="data-item">
+                        <p>닉네임</p>
+                        <h3>${escapeHTML(profile.nickname || '')}</h3>
+
+                        <p>이름</p>
+                        <h3>${escapeHTML(profile.full_name || '')}</h3>
+
+                        <p>회원 유형</p>
+                        <h3>${escapeHTML(profile.role || '')}</h3>
+
+                        <p>전화번호</p>
+                        <h3>${escapeHTML(profile.phone || '')}</h3>
+                    </div>
+                `;
+            });
+
+    } catch(error) {
+        console.error('방문객 개인정보 오류:', error);
+        content.innerHTML =
+            '<p>개인정보를 불러오지 못했습니다. 다시 시도해 주세요.</p>';
+    }
+}
+
 
 // ==================================
 // 임대인 / 임차인 개인정보 관리
