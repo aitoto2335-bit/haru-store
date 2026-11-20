@@ -1100,7 +1100,6 @@ function showPage(pageId) {
 
     // 로그인한 회원이 마이페이지에 들어오면 대시보드 표시
     if(pageId === 'mypage' && user) {
-        await loadRentalData();
         routeDashboard();
         return;
     }
@@ -1327,7 +1326,9 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
         this.reset();
 
         alert(profile.nickname + '님, 환영합니다!');
-
+        
+        await loadRentalData();
+        
         routeDashboard();
 
     } catch(error) {
