@@ -4792,6 +4792,35 @@ async function chatbotCallGemini() {
 
     throw new Error('지금 AI 서버가 바빠요. 잠시 후 다시 물어봐 주세요.');
 }
+
+// ==================================
+// 챗봇·지도 핀 색을 사이트 색(남색)에 맞추기
+// ==================================
+(function matchSiteColors() {
+    const style = document.createElement('style');
+    style.textContent = `
+        #chatbotButton,
+        .chatbot-header,
+        .chatbot-msg.user,
+        .chatbot-input button { background: #123F5A; }
+
+        #chatbotButton:hover,
+        .chatbot-input button:hover { background: #0D3045; }
+
+        #chatbotMessages { background: #F5F8FA; }
+
+        .chatbot-chips button {
+            border-color: #B9D3E2;
+            background: #E8F2F7;
+            color: #123F5A;
+        }
+
+        .chatbot-input input:focus { outline: 2px solid #123F5A; outline-offset: -1px; }
+
+        .map-pin-inner { border-color: #123F5A; }
+    `;
+    document.head.appendChild(style);
+})();
     
 // ==================================
 // 초기 실행
