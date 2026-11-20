@@ -1532,6 +1532,203 @@ function showVisitorPrivacy(button) {
         return;
     }
 
+    
+// ==================================
+// 방문객: 개인정보 수정 전 비밀번호 확인
+// ==================================
+
+function showVisitorPrivacyEditCheck() {
+    const user = getCurrentUser();
+    const content = document.getElementById('visitorPrivacyContent');
+
+    if(!user) {
+        alert('로그인이 필요합니다.');
+        return;
+    }
+
+    content.innerHTML = `
+        <h3>개인정보 수정 본인 확인</h3>
+        <p style="color:#888;font-size:13px;margin-bottom:20px">
+            개인정보를 수정하려면 비밀번호를 다시 입력해 주세요.
+        </p>
+
+        <form id="visitorEditPasswordForm">
+            <label>현재 비밀번호</label>
+            <input
+                id="visitorEditPassword"
+                type="password"
+                required
+                placeholder="비밀번호 입력"
+            >
+
+            <p id="visitorEditPasswordMessage"
+               class="form-message error"></p>
+
+            <button class="main-btn" type="submit">확인</button>
+            <button class="sub-btn" type="button"
+                onclick="showVisitorPrivacyDetails()">
+                취소
+            </button>
+        </form>
+    `;
+
+    document.getElementById('visitorEditPasswordForm')
+        .addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            const password =
+                document.getElementById('visitorEditPassword').value;
+
+            const users = getData('harugageUsers');
+            const member = users.find(item => item.id === user.id);
+
+            if(!member || member.password !== password) {
+                document.getElementById('visitorEditPasswordMessage')
+                    .textContent = '비밀번호가 일치하지 않습니다.';
+                return;
+            }
+
+            showVisitorPrivacyEditForm();
+        });
+}
+
+
+// 개인정보 표시 화면
+function showVisitorPrivacyDetails() {
+    const user = getCurrentUser();
+    const users = getData('harugageUsers');
+    const member = users.find(item => item.id === user.id);
+
+    if(!member) return;
+
+    document.getElementById('visitorPrivacyContent').innerHTML = `
+        <div class="data-item">
+            <p>닉네임</p>
+            <h3>${escapeHTML(member.nickname)}</h3>
+
+            <p>이름</p>
+            <h3>${escapeHTML(member.name)}</h3>
+
+            <p>회원 유형</p>
+            <h3>${escapeHTML(member.role)}</h3>
+
+            <p>전화번호</p>
+            <h3>${escapeHTML(member.phone)}</h3>
+        </div>
+
+        <button class="main-btn"
+            onclick="showVisitorPrivacyEditCheck()">
+            개인정보 수정하기
+        </button>
+    `;
+}
+
+
+// 개인정보 수정 입력 화면
+function showVisitorPrivacyEditForm() {
+    const user = getCurrentUser();
+    const users = getData('harugageUsers');
+    const member = users.find(item => item.id === user.id);
+
+    if(!member) return;
+
+    document.getElementById('visitorPrivacyContent').innerHTML = `
+        <h3>개인정보 수정</h3>
+
+        <form id="visitorEditForm">
+            <label>닉네임</label>
+            <input id="visitorEditNickname"
+                value="${escapeHTML(member.nickname)}" required>
+
+            <label>이름</label>
+            <input id="visitorEditName"
+                value="${escapeHTML(member.name)}" required>
+
+            <label>회원 유형</label>
+            <input value="${escapeHTML(member.role)}" disabled>
+
+            <label>전화번호</label>
+            <input id="visitorEditPhone"
+                type="tel" maxlength="13"
+                value="${escapeHTML(member.phone)}" required>
+
+            <button class="main-btn" type="submit">수정 완료</button>
+            <button class="sub-btn" type="button"
+                onclick="showVisitorPrivacyDetails()">취소</button>
+        </form>
+    `;
+
+    document.getElementById('visitorEditForm')
+        .addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            const nickname =
+                document.getElementById('visitorEditNickname').value.trim();
+            const name =
+                document.getElementById('visitorEditName').value.trim();
+            const phone =
+                document.getElementById('visitorEditPhone').value.trim();
+
+            const latestUsers = getData('harugageUsers');
+            const index = latestUsers.findIndex(item => item.id === user.id);
+
+            if(index === -1) {
+                alert('회원 정보를 찾을 수 없습니다.');
+                return;
+            }
+
+            if(nickname.length < 2 ||
+               !/^[a-zA-Z0-9가-힣]+$/.test(nickname)) {
+                alert('닉네임은 2글자 이상, 한글·영어·숫자만 사용할 수 있습니다.');
+                return;
+            }
+
+            if(latestUsers.some(item =>
+                item.id !== user.id &&
+                item.nickname.toLowerCase() === nickname.toLowerCase()
+            )) {
+                alert('이미 사용 중인 닉네임입니다.');
+                return;
+            }
+
+            if(!name) {
+                alert('이름을 입력해 주세요.');
+                return;
+            }
+
+            if(!/^010-\d{4}-\d{4}$/.test(phone)) {
+                alert('전화번호를 010-XXXX-XXXX 형식으로 입력해 주세요.');
+                return;
+            }
+
+            // 회원 정보 저장
+            latestUsers[index].nickname = nickname;
+            latestUsers[index].name = name;
+            latestUsers[index].phone = phone;
+
+            saveData('harugageUsers', latestUsers);
+
+            // 현재 로그인 정보 갱신
+            const updatedUser = {
+                ...user,
+                nickname,
+                name,
+                phone
+            };
+
+            localStorage.setItem(
+                'harugageCurrentUser',
+                JSON.stringify(updatedUser)
+            );
+
+            alert('개인정보가 수정되었습니다.');
+
+            updateVisitorDashboard();
+            showVisitorPrivacyDetails();
+        });
+}
+
+
     // 다른 메뉴 숨기기
     document.querySelectorAll('.visitor-panel').forEach(panel => {
         panel.classList.remove('active');
@@ -1598,8 +1795,8 @@ function showVisitorPrivacy(button) {
                 <h3>${escapeHTML(member.phone)}</h3>
             </div>
 
-            <button class="sub-btn" onclick="updateVisitorDashboard()">
-                대시보드로 돌아가기
+            <button class="main-btn" onclick="showVisitorPrivacyEditCheck()">
+                개인정보 수정하기
             </button>
         `;
     });
