@@ -596,6 +596,7 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
         <button class="active" onclick="showPanel('visitorPosts',this,'visitor')">내가 쓴 글</button>
         <button onclick="showPanel('visitorPayPanel',this,'visitor')">돌려받은 동해페이</button>
         <button onclick="showPanel('visitorShops',this,'visitor')">내가 간 가게</button>
+        <button onclick="showVisitorPrivacy(this)">개인정보</button>
     </div>
 
     <div id="visitorPosts" class="visitor-panel active">
@@ -647,6 +648,19 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
         </div>
     </div>
 
+    <!-- 개인정보 확인 -->
+    <div id="visitorPrivacy" class="visitor-panel">
+        <div class="section-box">
+            <h3>개인정보 확인</h3>
+            <p style="color:#888;font-size:13px;margin-bottom:20px">
+                개인정보를 확인하려면 비밀번호를 입력해 주세요.
+            </p>
+            <div id="visitorPrivacyContent">
+                개인정보 버튼을 눌러 본인 인증을 진행해 주세요.
+            </div>
+        </div>
+    </div>
+    
     <div class="section-box">
         <button class="sub-btn" onclick="logout()">로그아웃</button>
         <div class="delete-area">
@@ -760,6 +774,12 @@ function escapeHTML(value) {
 
 function showPage(pageId) {
     const user = getCurrentUser();
+
+    // 로그인한 회원이 마이페이지에 들어오면 대시보드 표시
+    if(pageId === 'mypage' && user) {
+        routeDashboard();
+        return;
+    }
 
     // 회원 유형 확인
     const isTenant = user && user.role === '임차인';
@@ -1500,6 +1520,90 @@ function updateVisitorDashboard() {
     renderStamps();
 }
 
+// ==================================
+// 방문객: 개인정보 비밀번호 확인
+// ==================================
+
+function showVisitorPrivacy(button) {
+    const user = getCurrentUser();
+
+    if(!user || user.role !== '방문객') {
+        alert('방문객 계정으로 로그인해 주세요.');
+        return;
+    }
+
+    // 다른 메뉴 숨기기
+    document.querySelectorAll('.visitor-panel').forEach(panel => {
+        panel.classList.remove('active');
+    });
+
+    // 개인정보 메뉴 표시
+    document.getElementById('visitorPrivacy').classList.add('active');
+
+    // 버튼 선택 표시
+    button.parentElement.querySelectorAll('button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    button.classList.add('active');
+
+    const content = document.getElementById('visitorPrivacyContent');
+
+    // 비밀번호 입력 화면
+    content.innerHTML = `
+        <form id="visitorPrivacyForm">
+            <label>현재 비밀번호</label>
+            <input
+                id="visitorPrivacyPassword"
+                type="password"
+                required
+                placeholder="비밀번호를 입력해 주세요."
+            >
+
+            <p id="visitorPrivacyMessage"
+               class="form-message error"></p>
+
+            <button class="main-btn" type="submit">
+                본인 확인
+            </button>
+        </form>
+    `;
+
+    document.getElementById('visitorPrivacyForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const password = document.getElementById('visitorPrivacyPassword').value;
+
+        const users = getData('harugageUsers');
+        const member = users.find(item => item.id === user.id);
+
+        if(!member || member.password !== password) {
+            document.getElementById('visitorPrivacyMessage').textContent =
+                '비밀번호가 일치하지 않습니다.';
+            return;
+        }
+
+        // 비밀번호가 맞으면 개인정보 표시
+        content.innerHTML = `
+            <div class="data-item">
+                <p>닉네임</p>
+                <h3>${escapeHTML(member.nickname)}</h3>
+
+                <p>이름</p>
+                <h3>${escapeHTML(member.name)}</h3>
+
+                <p>회원 유형</p>
+                <h3>${escapeHTML(member.role)}</h3>
+
+                <p>전화번호</p>
+                <h3>${escapeHTML(member.phone)}</h3>
+            </div>
+
+            <button class="sub-btn" onclick="updateVisitorDashboard()">
+                대시보드로 돌아가기
+            </button>
+        `;
+    });
+}
 
 // ==================================
 // 방문객: 영수증 촬영 (카메라)
