@@ -964,81 +964,153 @@ async function loadRentalData() {
     const user = getCurrentUser();
 
     try {
-        // 로그인한 사용자의 임차 내역
-        if(user) {
-            const { data: rentalRows, error: rentalError } =
-                await supabaseClient
-                    .from('rentals')
-                    .select('*')
-                    .order('created_at', { ascending: false });
+    // 팝업 정보를 먼저 불러오기
+    const { data: popupRows, error: popupError } =
+        await supabaseClient
+            .from('popups')
+            .select('*')
+            .order('created_at', { ascending: false });
 
-            if(rentalError) throw rentalError;
+    if(popupError) throw popupError;
 
-            rentalsCache = (rentalRows || []).map(item => ({
-                id: item.id,
-                userId: item.tenant_id,
-                tenantId: item.tenant_id,
-                ownerId: item.owner_id,
-                vacancyId: item.vacancy_id,
-                shopName: item.shop_name,
-                address: item.address || '',
-                startDate: item.start_date,
-                endDate: item.end_date,
-                days: item.days,
-                price: Number(item.price),
-                plan: item.plan || '',
-                status: item.status,
-                createdAt: item.created_at
-            }));
-        } else {
-            rentalsCache = [];
-        }
+    popupsCache = (popupRows || []).map(item => ({
+        id: item.id,
+        rentalId: item.rental_id,
+        userId: item.tenant_id,
+        tenantId: item.tenant_id,
+        vacancyId: item.vacancy_id,
+        popupName: item.popup_name,
+        popupCategory: item.popup_category || '',
+        plan: item.description || '',
+        startDate: item.start_date,
+        endDate: item.end_date,
+        shopName: item.shop_name || '',
+        address: item.address || '',
+        status: '예약 확정'
+    }));
 
-        // 홈 화면에 표시할 팝업 정보
-        const { data: popupRows, error: popupError } =
+    // 로그인한 사용자라면 임차 내역도 불러오기
+    if(user) {
+        const { data: rentalRows, error: rentalError } =
             await supabaseClient
-                .from('popups')
+                .from('rentals')
                 .select('*')
                 .order('created_at', { ascending: false });
 
-        if(popupError) throw popupError;
+        if(rentalError) throw rentalError;
 
-        popupsCache = (popupRows || []).map(item => ({
+        rentalsCache = (rentalRows || []).map(item => ({
             id: item.id,
-            rentalId: item.rental_id,
             userId: item.tenant_id,
             tenantId: item.tenant_id,
+            ownerId: item.owner_id,
             vacancyId: item.vacancy_id,
-            popupName: item.popup_name,
-            popupCategory: item.popup_category || '',
-            plan: item.description || '',
+            shopName: item.shop_name,
+            address: item.address || '',
             startDate: item.start_date,
             endDate: item.end_date,
-            shopName: item.shop_name || '',
-            address: item.address || '',
-            status: '예약 확정'
+            days: item.days,
+            price: Number(item.price),
+            plan: item.plan || '',
+            status: item.status,
+            createdAt: item.created_at
         }));
-
-        // 임차 내역에 팝업 정보 연결
-        rentalsCache.forEach(rental => {
-            const popup = popupsCache.find(
-                item => item.rentalId === rental.id
-            );
-
-            if(popup) {
-                rental.popupName = popup.popupName;
-                rental.popupCategory = popup.popupCategory;
-                rental.plan = popup.plan || rental.plan;
-            }
-        });
-
-        renderRentals();
-        renderPopups();
-
-    } catch(error) {
-        console.error('임차·팝업 데이터 불러오기 오류:', error);
-        alert('임차 내역 또는 팝업 정보를 불러오지 못했습니다: ' + error.message);
+    } else {
+        rentalsCache = [];
     }
+
+    // 임차 내역에 팝업 정보 연결
+    rentalsCache.forEach(rental => {
+        const popup = popupsCache.find(
+            item => item.rentalId === rental.id
+        );
+
+        if(popup) {
+            rental.popupName = popup.popupName;
+            rental.popupCategory = popup.popupCategory;
+            rental.plan = popup.plan || rental.plan;
+        }
+    });
+
+    renderRentals();
+    renderPopups();
+
+} catch(error) {
+    console.error('임차·팝업 데이터 불러오기 오류:', error);
+}try {
+    // 팝업 정보를 먼저 불러오기
+    const { data: popupRows, error: popupError } =
+        await supabaseClient
+            .from('popups')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+    if(popupError) throw popupError;
+
+    popupsCache = (popupRows || []).map(item => ({
+        id: item.id,
+        rentalId: item.rental_id,
+        userId: item.tenant_id,
+        tenantId: item.tenant_id,
+        vacancyId: item.vacancy_id,
+        popupName: item.popup_name,
+        popupCategory: item.popup_category || '',
+        plan: item.description || '',
+        startDate: item.start_date,
+        endDate: item.end_date,
+        shopName: item.shop_name || '',
+        address: item.address || '',
+        status: '예약 확정'
+    }));
+
+    // 로그인한 사용자라면 임차 내역도 불러오기
+    if(user) {
+        const { data: rentalRows, error: rentalError } =
+            await supabaseClient
+                .from('rentals')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+        if(rentalError) throw rentalError;
+
+        rentalsCache = (rentalRows || []).map(item => ({
+            id: item.id,
+            userId: item.tenant_id,
+            tenantId: item.tenant_id,
+            ownerId: item.owner_id,
+            vacancyId: item.vacancy_id,
+            shopName: item.shop_name,
+            address: item.address || '',
+            startDate: item.start_date,
+            endDate: item.end_date,
+            days: item.days,
+            price: Number(item.price),
+            plan: item.plan || '',
+            status: item.status,
+            createdAt: item.created_at
+        }));
+    } else {
+        rentalsCache = [];
+    }
+
+    // 임차 내역에 팝업 정보 연결
+    rentalsCache.forEach(rental => {
+        const popup = popupsCache.find(
+            item => item.rentalId === rental.id
+        );
+
+        if(popup) {
+            rental.popupName = popup.popupName;
+            rental.popupCategory = popup.popupCategory;
+            rental.plan = popup.plan || rental.plan;
+        }
+    });
+
+    renderRentals();
+    renderPopups();
+
+} catch(error) {
+    console.error('임차·팝업 데이터 불러오기 오류:', error);
 }
 
 function getVacancies() {
@@ -4377,36 +4449,37 @@ function updatePopupMap() {
     popupMapLayer.clearLayers();
 
     const today = todayStr();
-    const user = getCurrentUser();
-    const myStamps = user ? getData('harugageStamps').filter(item => item.userId === user.id) : [];
     const shops = getVacancies();
     const points = [];
 
     getActivePopups()
-        .filter(item => item.endDate >= today)
+        .filter(item =>
+            item.endDate >= today
+        )
         .forEach(item => {
-            const shop = shops.find(v => v.id === item.vacancyId);
+            const shop = shops.find(
+                v => String(v.id) === String(item.vacancyId)
+            );
+
             if(!hasLocation(shop)) return;
 
-            const isOpen = item.startDate <= today;
-            const visited = myStamps.some(stamp => stamp.shopId === shop.id);
-            const emoji = visited ? '✅' : (isOpen ? '🔥' : '🎪');
+            points.push([shop.lat, shop.lng]);
 
-            points.push([shop.lat,shop.lng]);
-
-            L.marker([shop.lat,shop.lng],{ icon:emojiIcon(emoji) })
-                .bindPopup(`
-                    <strong>${escapeHTML(item.popupName)}</strong><br>
-                    ${isOpen ? '🔥 진행 중' : 'D-'+calculateDday(item.startDate)+' 오픈 예정'}
-                    ${visited ? ' · ✅ 방문 완료' : ''}<br>
-                    📍 ${escapeHTML(shop.name)}<br>
-                    📅 ${escapeHTML(item.startDate)} ~ ${escapeHTML(item.endDate)}
-                    ${shop.time ? '<br>🕘 '+escapeHTML(shop.time) : ''}
-                `)
-                .addTo(popupMapLayer);
+            L.marker(
+                [shop.lat, shop.lng],
+                { icon: emojiIcon('🎪') }
+            )
+            .bindPopup(`
+                <strong>${escapeHTML(item.popupName)}</strong><br>
+                🎪 진행 중<br>
+                📍 ${escapeHTML(shop.name)}<br>
+                ${escapeHTML(shop.address)}<br>
+                📅 ${escapeHTML(item.startDate)} ~ ${escapeHTML(item.endDate)}
+            `)
+            .addTo(popupMapLayer);
         });
 
-    fitToMarkers(popupMap,points);
+    fitToMarkers(popupMap, points);
     refreshMapSize(popupMap);
 }
 
