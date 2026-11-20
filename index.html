@@ -160,6 +160,12 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
 .camera-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 14px; }
 .camera-buttons button { min-width: 130px; }
 
+    /* 점포 대여 */
+.card-content .main-btn { width: 100%; margin-top: 10px; padding: 10px; }
+.rent-summary { background: #e9efe7; color: #426b50; border-radius: 10px; padding: 16px; margin-bottom: 18px; font-size: 14px; line-height: 1.8; }
+.rent-summary strong { font-size: 22px; }
+.booked-item { display: inline-block; background: #fff0e4; color: #c46b25; border-radius: 20px; padding: 6px 12px; font-size: 13px; margin: 4px 4px 0 0; }
+    
 /* 동해페이 */
 .pay-highlight { background: #e9efe7; padding: 28px; border-radius: 12px; margin-bottom: 20px; }
 .pay-highlight h2 { color: #426b50; font-size: 30px; margin-top: 10px; }
@@ -209,17 +215,48 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
 <section id="renter" class="page">
     <h2>나에게 맞는 점포 찾기</h2>
     <div class="section-box">
-        <label>어떤 창업을 계획하고 있나요?</label>
-        <input placeholder="예: 디저트 팝업, 의류 판매">
+        <label>점포 이름 또는 주소 검색</label>
+        <input id="searchKeyword" placeholder="예: 묵호, 카페">
 
         <label>희망 지역</label>
-        <select>
-            <option>전체 지역</option>
+        <select id="searchArea">
+            <option value="">전체 지역</option>
             <option>묵호동</option>
             <option>천곡동</option>
             <option>발한동</option>
         </select>
-        <button class="main-btn" onclick="alert('검색 기능은 준비 중입니다.')">점포 검색</button>
+        <button class="main-btn" onclick="renderShopList()">점포 검색</button>
+    </div>
+    <div id="shopList" class="cards"></div>
+</section>
+
+<!-- 점포 빌리기 -->
+<section id="rentPage" class="page">
+    <button class="back-btn" onclick="showPage('renter')">← 점포 목록</button>
+    <h2>점포 빌리기</h2>
+
+    <div class="section-box" id="rentShopInfo"></div>
+
+    <div class="section-box">
+        <form id="rentForm">
+            <label>대여 시작일</label>
+            <input id="rentStart" type="date" required>
+
+            <label>대여 종료일</label>
+            <input id="rentEnd" type="date" required>
+
+            <label>창업 아이템 / 운영 계획</label>
+            <textarea id="rentPlan" rows="3" placeholder="예: 수제 디저트 팝업 스토어"></textarea>
+
+            <div class="rent-summary" id="rentSummary">날짜를 선택하면 대여료가 계산돼요.</div>
+
+            <button class="main-btn" type="submit">대여 신청하기</button>
+        </form>
+    </div>
+
+    <div class="section-box">
+        <h3>이미 예약된 날짜</h3>
+        <div id="rentBooked"></div>
     </div>
 </section>
 
@@ -645,6 +682,7 @@ function showPage(pageId) {
     if(pageId === 'tenantDashboard') updateTenantDashboard();
     if(pageId === 'visitorDashboard') updateVisitorDashboard();
     if(pageId === 'home') renderHome();
+    if(pageId === 'renter') renderShopList();
 }
 
 function showPanel(panelId,button,type) {
@@ -1702,6 +1740,195 @@ function renderHome() {
     `).join('');
 }
 
+    // ==================================
+// 점포 찾기 & 빌리기 (임차인)
+// ==================================
+
+let rentingShopId = null;
+
+function todayStr() {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0,10);
+}
+
+function daysBetween(start,end) {
+    return Math.round((new Date(end+'T00:00:00') - new Date(start+'T00:00:00')) / 86400000) + 1;
+}
+
+function getShopRentals(shopId) {
+    return getData('harugageRentals').filter(item => item.vacancyId === shopId && item.status !== '취소');
+}
+
+function shopCardHTML(item) {
+    return `
+        <div class="card">
+            <div class="card-image">점포 이미지</div>
+            <div class="card-content">
+                <h3>${escapeHTML(item.name)}</h3>
+                <p>위치: ${escapeHTML(item.address)}</p>
+                <p>대여료: ${money(item.price)} / 1일</p>
+                <p>대여 가능 시간: ${escapeHTML(item.time || '미입력')}</p>
+                <button class="main-btn" onclick="openRent('${item.id}')">이 점포 빌리기</button>
+            </div>
+        </div>
+    `;
+}
+
+function renderShopList() {
+    const keyword = document.getElementById('searchKeyword').value.trim().toLowerCase();
+    const area = document.getElementById('searchArea').value;
+    const container = document.getElementById('shopList');
+
+    const shops = getVacancies().filter(item => {
+        const text = (item.name+' '+item.address+' '+(item.description || '')).toLowerCase();
+        if(keyword && !text.includes(keyword)) return false;
+        if(area && !String(item.address).includes(area)) return false;
+        return true;
+    });
+
+    if(!shops.length) {
+        container.innerHTML = `<div class="empty-state" style="grid-column:1/-1">조건에 맞는 점포가 없습니다.</div>`;
+        return;
+    }
+
+    container.innerHTML = shops.map(shopCardHTML).join('');
+}
+
+function openRent(shopId) {
+    const user = getCurrentUser();
+
+    if(!user) {
+        alert('로그인 후 점포를 빌릴 수 있어요.');
+        showPage('login');
+        return;
+    }
+
+    if(user.role !== '임차인') {
+        alert('점포 대여는 임차인 계정만 가능합니다.');
+        return;
+    }
+
+    const shop = getVacancies().find(item => item.id === shopId);
+    if(!shop) { alert('점포 정보를 찾을 수 없습니다.'); return; }
+
+    rentingShopId = shopId;
+
+    document.getElementById('rentShopInfo').innerHTML = `
+        <h3 style="color:#426b50">${escapeHTML(shop.name)}</h3>
+        <p style="color:#777;font-size:14px;line-height:2">
+            📍 ${escapeHTML(shop.address)}<br>
+            하루 대여료: ${money(shop.price)}<br>
+            대여 가능 시간: ${escapeHTML(shop.time || '미입력')}<br>
+            ${escapeHTML(shop.description || '')}
+        </p>
+    `;
+
+    document.getElementById('rentForm').reset();
+    document.getElementById('rentStart').min = todayStr();
+    document.getElementById('rentEnd').min = todayStr();
+    document.getElementById('rentSummary').innerHTML = '날짜를 선택하면 대여료가 계산돼요.';
+
+    const booked = getShopRentals(shopId);
+    document.getElementById('rentBooked').innerHTML = booked.length ?
+        booked.map(item => `<span class="booked-item">${escapeHTML(item.startDate)} ~ ${escapeHTML(item.endDate)}</span>`).join('') :
+        '<div class="empty-state">아직 예약된 날짜가 없어요. 원하는 날짜를 골라보세요!</div>';
+
+    showPage('rentPage');
+}
+
+function updateRentSummary() {
+    const shop = getVacancies().find(item => item.id === rentingShopId);
+    const start = document.getElementById('rentStart').value;
+    const end = document.getElementById('rentEnd').value;
+    const box = document.getElementById('rentSummary');
+
+    if(start) document.getElementById('rentEnd').min = start;
+
+    if(!shop || !start || !end) {
+        box.innerHTML = '날짜를 선택하면 대여료가 계산돼요.';
+        return;
+    }
+
+    if(end < start) {
+        box.innerHTML = '종료일은 시작일과 같거나 이후여야 해요.';
+        return;
+    }
+
+    const days = daysBetween(start,end);
+    box.innerHTML = `${escapeHTML(start)} ~ ${escapeHTML(end)} (${days}일)<br>
+        ${money(shop.price)} × ${days}일 = <strong>${money(shop.price * days)}</strong>`;
+}
+
+document.getElementById('rentStart').addEventListener('change',updateRentSummary);
+document.getElementById('rentEnd').addEventListener('change',updateRentSummary);
+
+document.getElementById('rentForm').addEventListener('submit',function(event) {
+    event.preventDefault();
+
+    const user = getCurrentUser();
+    if(!user || user.role !== '임차인') { alert('임차인 계정으로 로그인해주세요.'); return; }
+
+    const shop = getVacancies().find(item => item.id === rentingShopId);
+    if(!shop) { alert('점포 정보를 찾을 수 없습니다.'); return; }
+
+    const start = document.getElementById('rentStart').value;
+    const end = document.getElementById('rentEnd').value;
+    const plan = document.getElementById('rentPlan').value.trim();
+
+    if(!start || !end) { alert('대여 날짜를 선택해주세요.'); return; }
+    if(start < todayStr()) { alert('지난 날짜는 선택할 수 없어요.'); return; }
+    if(end < start) { alert('종료일은 시작일과 같거나 이후여야 해요.'); return; }
+
+    // 다른 예약과 날짜가 겹치는지 확인
+    const overlap = getShopRentals(shop.id).some(item => start <= item.endDate && end >= item.startDate);
+    if(overlap) { alert('선택한 기간에 이미 예약이 있어요. 다른 날짜를 골라주세요.'); return; }
+
+    const days = daysBetween(start,end);
+    const total = shop.price * days;
+
+    if(!confirm(`${shop.name}\n${start} ~ ${end} (${days}일)\n대여료 ${money(total)}\n\n대여를 신청할까요?`)) return;
+
+    const now = Date.now();
+
+    const rentals = getData('harugageRentals');
+    rentals.push({
+        id:now.toString(),
+        userId:user.id,
+        vacancyId:shop.id,
+        ownerId:shop.ownerId,
+        shopName:shop.name,
+        address:shop.address,
+        startDate:start,
+        endDate:end,
+        days,
+        price:total,
+        plan,
+        status:'예약 확정',
+        createdAt:now
+    });
+    saveData('harugageRentals',rentals);
+
+    // 임대인 수익 기록
+    const payments = getData('harugagePayments');
+    payments.push({
+        id:(now+1).toString(),
+        ownerId:shop.ownerId,
+        tenantId:user.id,
+        vacancyId:shop.id,
+        amount:total,
+        date:todayStr(),
+        status:'completed',
+        description:shop.name+' 대여 ('+start+' ~ '+end+')'
+    });
+    saveData('harugagePayments',payments);
+
+    alert('대여 신청이 완료되었습니다!');
+
+    showPage('tenantDashboard');
+    showPanel('tenantRentals',
+        document.querySelector('#tenantDashboard .dashboard-menu button:nth-child(2)'),'tenant');
+});
 
 // ==================================
 // 초기 실행
