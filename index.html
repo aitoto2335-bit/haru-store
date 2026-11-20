@@ -554,8 +554,9 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
 // AI 서버 설정
 // ==================================
 
-// Cloudflare Worker 주소 (API 키는 Worker 안에만 보관, 이 코드에는 키 없음)
+// ▼▼▼ 여기 따옴표 안을 Cloudflare Worker 주소로 바꾸세요 ▼▼▼
 const AI_PROXY_URL = 'https://여기에-워커주소.workers.dev';
+// ▲▲▲ API 키는 여기 넣지 말고 Worker의 Secret에만 넣으세요 ▲▲▲
 
 // 앞에서부터 차례로 시도, 404(모델 없음)이면 다음 모델로 넘어감
 const GEMINI_MODELS = ['gemini-3.8-flash','gemini-3-flash','gemini-flash-latest'];
