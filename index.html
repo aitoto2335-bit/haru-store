@@ -1366,31 +1366,38 @@ function updateMypage() {
         return;
     }
 
+
     // 로그인한 회원 정보 표시
     content.innerHTML = `
         <h3>내 회원 정보</h3>
 
+        <div class="data-item">
+            <p>닉네임</p>
+            <h3>${escapeHTML(user.nickname)}</h3>
 
-        content.innerHTML = `
-            <div class="data-item">
-                <p>닉네임</p>
-                <h3>${escapeHTML(profile.nickname || '')}</h3>
-        
-                <p>이름</p>
-                <h3>${escapeHTML(profile.full_name || '')}</h3>
-        
-                <p>회원 유형</p>
-                <h3>${escapeHTML(profile.role || '')}</h3>
-        
-                <p>전화번호</p>
-                <h3>${escapeHTML(profile.phone || '')}</h3>
-            </div>
-        
-            <button class="main-btn"
-                onclick="showDashboardPrivacyEditCheck('visitor')">
-                개인정보 수정하기
-            </button>
-        `;
+            <p>이름</p>
+            <h3>${escapeHTML(user.name)}</h3>
+
+            <p>회원 유형</p>
+            <h3>${escapeHTML(user.role)}</h3>
+
+            <p>전화번호</p>
+            <h3>${escapeHTML(user.phone)}</h3>
+        </div>
+
+        <button class="main-btn" onclick="showProfilePasswordCheck()">
+            개인정보 수정
+        </button>
+
+        <button class="sub-btn" onclick="routeDashboard()">
+            내 대시보드
+        </button>
+
+        <button class="sub-btn" onclick="logout()">
+            로그아웃
+        </button>
+    `;
+}
 
 
 
@@ -2149,6 +2156,11 @@ async function showVisitorPrivacy(button) {
                         <p>전화번호</p>
                         <h3>${escapeHTML(profile.phone || '')}</h3>
                     </div>
+
+                    <button class="main-btn"
+                        onclick="showDashboardPrivacyEditCheck('visitor')">
+                        개인정보 수정하기
+                    </button>
                 `;
             });
 
