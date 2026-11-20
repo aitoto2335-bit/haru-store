@@ -475,6 +475,11 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
         <form id="vacancyForm">
             <label>공실 주소</label>
             <input id="vacancyAddress" required placeholder="예: 강원특별자치도 동해시 묵호진동">
+            <p id="registerMapText" class="help">
+                주소를 입력하면 위치를 자동으로 찾을 수 있어요.
+            </p>
+            
+            <div id="registerMap" class="map-box small"></div>
         
             <label>공실 규모</label>
             <input id="vacancySize" required placeholder="예: 약 20평">
