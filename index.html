@@ -956,6 +956,90 @@ function getCurrentUser() {
 
 
 let vacanciesCache = [];
+let rentalsCache = [];
+let popupsCache = [];
+
+// Supabase에서 임차 내역과 팝업 정보 불러오기
+async function loadRentalData() {
+    const user = getCurrentUser();
+
+    try {
+        // 로그인한 사용자의 임차 내역
+        if(user) {
+            const { data: rentalRows, error: rentalError } =
+                await supabaseClient
+                    .from('rentals')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+            if(rentalError) throw rentalError;
+
+            rentalsCache = (rentalRows || []).map(item => ({
+                id: item.id,
+                userId: item.tenant_id,
+                tenantId: item.tenant_id,
+                ownerId: item.owner_id,
+                vacancyId: item.vacancy_id,
+                shopName: item.shop_name,
+                address: item.address || '',
+                startDate: item.start_date,
+                endDate: item.end_date,
+                days: item.days,
+                price: Number(item.price),
+                plan: item.plan || '',
+                status: item.status,
+                createdAt: item.created_at
+            }));
+        } else {
+            rentalsCache = [];
+        }
+
+        // 홈 화면에 표시할 팝업 정보
+        const { data: popupRows, error: popupError } =
+            await supabaseClient
+                .from('popups')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+        if(popupError) throw popupError;
+
+        popupsCache = (popupRows || []).map(item => ({
+            id: item.id,
+            rentalId: item.rental_id,
+            userId: item.tenant_id,
+            tenantId: item.tenant_id,
+            vacancyId: item.vacancy_id,
+            popupName: item.popup_name,
+            popupCategory: item.popup_category || '',
+            plan: item.description || '',
+            startDate: item.start_date,
+            endDate: item.end_date,
+            shopName: item.shop_name || '',
+            address: item.address || '',
+            status: '예약 확정'
+        }));
+
+        // 임차 내역에 팝업 정보 연결
+        rentalsCache.forEach(rental => {
+            const popup = popupsCache.find(
+                item => item.rentalId === rental.id
+            );
+
+            if(popup) {
+                rental.popupName = popup.popupName;
+                rental.popupCategory = popup.popupCategory;
+                rental.plan = popup.plan || rental.plan;
+            }
+        });
+
+        renderRentals();
+        renderPopups();
+
+    } catch(error) {
+        console.error('임차·팝업 데이터 불러오기 오류:', error);
+        alert('임차 내역 또는 팝업 정보를 불러오지 못했습니다: ' + error.message);
+    }
+}
 
 function getVacancies() {
     return vacanciesCache;
@@ -1016,6 +1100,7 @@ function showPage(pageId) {
 
     // 로그인한 회원이 마이페이지에 들어오면 대시보드 표시
     if(pageId === 'mypage' && user) {
+        await loadRentalData();
         routeDashboard();
         return;
     }
@@ -1773,7 +1858,10 @@ function updateOwnerDashboard() {
 // ==================================
 
 function getMyRentals() {
-    return getCurrentUserItems('harugageRentals');
+    const user = getCurrentUser();
+    if(!user) return [];
+
+    return rentalsCache.filter(item => item.userId === user.id);
 }
 
 function calculateDday(dateString) {
@@ -2849,7 +2937,9 @@ function daysBetween(start,end) {
 }
 
 function getShopRentals(shopId) {
-    return getData('harugageRentals').filter(item => item.vacancyId === shopId && item.status !== '취소');
+    return rentalsCache.filter(
+        item => item.vacancyId === shopId && item.status !== '취소'
+    );
 }
 
 function shopCardHTML(item) {
@@ -2968,73 +3058,141 @@ function updateRentSummary() {
 document.getElementById('rentStart').addEventListener('change',updateRentSummary);
 document.getElementById('rentEnd').addEventListener('change',updateRentSummary);
 
-document.getElementById('rentForm').addEventListener('submit',function(event) {
+document.getElementById('rentForm').addEventListener('submit', async function(event) {
     event.preventDefault();
 
     const user = getCurrentUser();
-    if(!user || user.role !== '임차인') { alert('임차인 계정으로 로그인해주세요.'); return; }
+
+    if(!user || user.role !== '임차인') {
+        alert('임차인 계정으로 로그인해주세요.');
+        return;
+    }
 
     const shop = getVacancies().find(item => item.id === rentingShopId);
-    if(!shop) { alert('점포 정보를 찾을 수 없습니다.'); return; }
+
+    if(!shop) {
+        alert('점포 정보를 찾을 수 없습니다.');
+        return;
+    }
 
     const start = document.getElementById('rentStart').value;
     const end = document.getElementById('rentEnd').value;
     const plan = document.getElementById('rentPlan').value.trim();
 
-    if(!start || !end) { alert('대여 날짜를 선택해주세요.'); return; }
-    if(start < todayStr()) { alert('지난 날짜는 선택할 수 없어요.'); return; }
-    if(end < start) { alert('종료일은 시작일과 같거나 이후여야 해요.'); return; }
+    if(!start || !end) {
+        alert('대여 날짜를 선택해주세요.');
+        return;
+    }
 
-    // 다른 예약과 날짜가 겹치는지 확인
-    const overlap = getShopRentals(shop.id).some(item => start <= item.endDate && end >= item.startDate);
-    if(overlap) { alert('선택한 기간에 이미 예약이 있어요. 다른 날짜를 골라주세요.'); return; }
+    if(start < todayStr()) {
+        alert('지난 날짜는 선택할 수 없어요.');
+        return;
+    }
 
-    const days = daysBetween(start,end);
-    const total = shop.price * days;
+    if(end < start) {
+        alert('종료일은 시작일과 같거나 이후여야 해요.');
+        return;
+    }
 
-    if(!confirm(`${shop.name}\n${start} ~ ${end} (${days}일)\n대여료 ${money(total)}\n\n대여를 신청할까요?`)) return;
+    const overlap = getShopRentals(shop.id).some(
+        item => start <= item.endDate && end >= item.startDate
+    );
 
-    const now = Date.now();
+    if(overlap) {
+        alert('선택한 기간에 이미 예약이 있어요. 다른 날짜를 골라주세요.');
+        return;
+    }
 
-    const rentals = getData('harugageRentals');
-    rentals.push({
-        id:now.toString(),
-        userId:user.id,
-        vacancyId:shop.id,
-        ownerId:shop.ownerId,
-        shopName:shop.name,
-        address:shop.address,
-        startDate:start,
-        endDate:end,
-        days,
-        price:total,
-        plan,
-        popupName:document.getElementById('rentPopupName').value.trim(),
-        popupCategory:document.getElementById('rentPopupCategory').value,
-        status:'예약 확정',
-        createdAt:now
-    });
-    saveData('harugageRentals',rentals);
+    const days = daysBetween(start, end);
+    const total = Number(shop.price) * days;
 
-    // 임대인 수익 기록
-    const payments = getData('harugagePayments');
-    payments.push({
-        id:(now+1).toString(),
-        ownerId:shop.ownerId,
-        tenantId:user.id,
-        vacancyId:shop.id,
-        amount:total,
-        date:todayStr(),
-        status:'completed',
-        description:shop.name+' 대여 ('+start+' ~ '+end+')'
-    });
-    saveData('harugagePayments',payments);
+    if(!confirm(
+        `${shop.name}\n${start} ~ ${end} (${days}일)\n대여료 ${money(total)}\n\n대여를 신청할까요?`
+    )) return;
 
-    alert('대여 신청이 완료되었습니다!');
+    const rentalId = Date.now().toString();
 
-    showPage('tenantDashboard');
-    showPanel('tenantRentals',
-        document.querySelector('#tenantDashboard .dashboard-menu button:nth-child(2)'),'tenant');
+    try {
+        // 1. 임차 내역을 Supabase에 저장
+        const { data: rentalData, error: rentalError } =
+            await supabaseClient
+                .from('rentals')
+                .insert([{
+                    id: rentalId,
+                    tenant_id: user.id,
+                    owner_id: shop.ownerId,
+                    vacancy_id: shop.id,
+                    shop_name: shop.name,
+                    address: shop.address,
+                    start_date: start,
+                    end_date: end,
+                    days: days,
+                    price: total,
+                    plan: plan,
+                    status: '예약 확정'
+                }])
+                .select()
+                .single();
+
+        if(rentalError) throw rentalError;
+
+        // 2. 대여 신청 시 입력한 팝업 이름이 있으면 팝업도 저장
+        const initialPopupName =
+            document.getElementById('rentPopupName').value.trim();
+
+        if(initialPopupName) {
+            const { error: popupError } = await supabaseClient
+                .from('popups')
+                .upsert([{
+                    rental_id: rentalId,
+                    tenant_id: user.id,
+                    vacancy_id: shop.id,
+                    popup_name: initialPopupName,
+                    popup_category: document.getElementById('rentPopupCategory').value,
+                    description: plan,
+                    start_date: start,
+                    end_date: end,
+                    shop_name: shop.name,
+                    address: shop.address
+                }], {
+                    onConflict: 'rental_id'
+                });
+
+            if(popupError) throw popupError;
+        }
+
+        // 3. 임대인 수익 기록은 기존 방식 유지
+        const payments = getData('harugagePayments');
+
+        payments.push({
+            id: (Date.now() + 1).toString(),
+            ownerId: shop.ownerId,
+            tenantId: user.id,
+            vacancyId: shop.id,
+            amount: total,
+            date: todayStr(),
+            status: 'completed',
+            description: shop.name + ' 대여 (' + start + ' ~ ' + end + ')'
+        });
+
+        saveData('harugagePayments', payments);
+
+        await loadRentalData();
+
+        alert('점포 대여 신청이 완료되었습니다!');
+
+        showPage('tenantDashboard');
+
+        showPanel(
+            'tenantRentals',
+            document.querySelector('#tenantDashboard .dashboard-menu button:nth-child(2)'),
+            'tenant'
+        );
+
+    } catch(error) {
+        console.error('임차 신청 오류:', error);
+        alert('임차 신청에 실패했습니다: ' + error.message);
+    }
 });
 // ==================================
 // 팝업 & 영수증 유효성 검사
@@ -3046,7 +3204,9 @@ document.getElementById('rentForm').addEventListener('submit',function(event) {
 const RECEIPT_MAX_DAYS = 30;
 
 function getActivePopups() {
-    return getData('harugageRentals').filter(item => item.status !== '취소' && item.popupName);
+    return popupsCache.filter(item =>
+        item.status !== '취소' && item.popupName
+    );
 }
 
 // ---------- 홈: 지금 열리는 팝업 ----------
@@ -3137,41 +3297,100 @@ let editingRentalId = null;
 
 function openPopupEdit(rentalId) {
     const user = getCurrentUser();
-    const rental = getData('harugageRentals').find(item => item.id === rentalId && user && item.userId === user.id);
-    if(!rental) { alert('임차 내역을 찾을 수 없습니다.'); return; }
+
+    const rental = rentalsCache.find(
+        item => item.id === rentalId && user && item.userId === user.id
+    );
+
+    if(!rental) {
+        alert('임차 내역을 찾을 수 없습니다.');
+        return;
+    }
 
     editingRentalId = rentalId;
 
+    const popup = popupsCache.find(item => item.rentalId === rentalId);
+
     document.getElementById('popupEditShop').innerHTML =
-        `📍 ${escapeHTML(rental.shopName)}<br>📅 ${escapeHTML(rental.startDate)} ~ ${escapeHTML(rental.endDate)}`;
-    document.getElementById('popupName').value = rental.popupName || '';
-    document.getElementById('popupCategory').value = rental.popupCategory || '디저트·카페';
-    document.getElementById('popupDesc').value = rental.plan || '';
+        `📍 ${escapeHTML(rental.shopName)}<br>
+         📅 ${escapeHTML(rental.startDate)} ~ ${escapeHTML(rental.endDate)}`;
+
+    document.getElementById('popupName').value =
+        popup ? popup.popupName : '';
+
+    document.getElementById('popupCategory').value =
+        popup ? popup.popupCategory : '디저트·카페';
+
+    document.getElementById('popupDesc').value =
+        popup ? popup.plan : rental.plan || '';
 
     showPage('popupEdit');
 }
 
-document.getElementById('popupForm').addEventListener('submit',function(event) {
+document.getElementById('popupForm').addEventListener('submit', async function(event) {
     event.preventDefault();
 
     const user = getCurrentUser();
-    const rentals = getData('harugageRentals');
-    const rental = rentals.find(item => item.id === editingRentalId && user && item.userId === user.id);
-    if(!rental) { alert('임차 내역을 찾을 수 없습니다.'); return; }
+
+    if(!user) {
+        alert('로그인이 필요합니다.');
+        return;
+    }
+
+    const rental = rentalsCache.find(
+        item => item.id === editingRentalId && item.userId === user.id
+    );
+
+    if(!rental) {
+        alert('임차 내역을 찾을 수 없습니다.');
+        return;
+    }
 
     const name = document.getElementById('popupName').value.trim();
-    if(name.length < 2) { alert('팝업 이름을 2글자 이상 입력해주세요.'); return; }
+    const category = document.getElementById('popupCategory').value;
+    const description = document.getElementById('popupDesc').value.trim();
 
-    rental.popupName = name;
-    rental.popupCategory = document.getElementById('popupCategory').value;
-    rental.plan = document.getElementById('popupDesc').value.trim();
-    saveData('harugageRentals',rentals);
+    if(name.length < 2) {
+        alert('팝업 이름을 2글자 이상 입력해주세요.');
+        return;
+    }
 
-    alert('팝업이 등록되었습니다! 홈 화면에 표시돼요.');
+    try {
+        const { error } = await supabaseClient
+            .from('popups')
+            .upsert([{
+                rental_id: rental.id,
+                tenant_id: user.id,
+                vacancy_id: rental.vacancyId,
+                popup_name: name,
+                popup_category: category,
+                description: description,
+                start_date: rental.startDate,
+                end_date: rental.endDate,
+                shop_name: rental.shopName,
+                address: rental.address
+            }], {
+                onConflict: 'rental_id'
+            });
 
-    showPage('tenantDashboard');
-    showPanel('tenantRentals',
-        document.querySelector('#tenantDashboard .dashboard-menu button:nth-child(2)'),'tenant');
+        if(error) throw error;
+
+        await loadRentalData();
+
+        alert('팝업 정보가 저장되었습니다! 홈 화면에 표시돼요.');
+
+        showPage('tenantDashboard');
+
+        showPanel(
+            'tenantRentals',
+            document.querySelector('#tenantDashboard .dashboard-menu button:nth-child(2)'),
+            'tenant'
+        );
+
+    } catch(error) {
+        console.error('팝업 저장 오류:', error);
+        alert('팝업 저장에 실패했습니다: ' + error.message);
+    }
 });
 
 // ---------- AI 영수증 인식 (진위 판별 포함) ----------
@@ -4284,8 +4503,10 @@ document.getElementById('vacancyAddress').addEventListener('change',findLocation
 // ==================================
 
 showPage('home');
-// Supabase에 저장된 공실 정보 불러오기
+
+// Supabase에 저장된 정보 불러오기
 loadVacancies();
+loadRentalData();
 </script>
 </body>
 </html>
