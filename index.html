@@ -956,7 +956,9 @@ async function loadVacancies() {
     ...item,
     ownerId: item.owner_id,
     name: item.address,
-    time: item.available_time || ''
+    time: item.available_time || '',
+    lat: item.lat == null ? null : Number(item.lat),
+    lng: item.lng == null ? null : Number(item.lng)
 }));
 
     renderShopList();
@@ -1508,7 +1510,9 @@ document.getElementById('vacancyForm').addEventListener('submit', async function
             price: price,
             description: description,
             time: time,
-            available_time: time
+            available_time: time,
+            lat: pickedLat,
+            lng: pickedLng
         }])
         .select()
         .single();
