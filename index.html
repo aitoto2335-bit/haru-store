@@ -398,35 +398,21 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     <div class="section-box">
         <h3>회원 유형 선택</h3>
 
-        <div class="role-option">
-    <button type="button" onclick="selectRole('임대인',this)">
-        🏢<br><br>임대인
-    </button>
-
-    <button type="button" onclick="selectRole('임차인',this)">
-        🏬<br><br>임차인
-    </button>
-
-    <button type="button" onclick="selectRole('방문객',this)">
-        👤<br><br>방문객
-    </button>
-</div>
-
-<p class="help">이용할 유형을 여러 개 선택할 수 있습니다.</p><div class="role-option">
-    <button type="button" onclick="selectRole('임대인',this)">
-        🏢<br><br>임대인
-    </button>
-
-    <button type="button" onclick="selectRole('임차인',this)">
-        🏬<br><br>임차인
-    </button>
-
-    <button type="button" onclick="selectRole('방문객',this)">
-        👤<br><br>방문객
-    </button>
-</div>
-
-<p class="help">이용할 유형을 여러 개 선택할 수 있습니다.</p>
+    <div class="role-option">
+        <button type="button" onclick="selectRole('임대인',this)">
+            🏢<br><br>임대인
+        </button>
+    
+        <button type="button" onclick="selectRole('임차인',this)">
+            🏬<br><br>임차인
+        </button>
+    
+        <button type="button" onclick="selectRole('방문객',this)">
+            👤<br><br>방문객
+        </button>
+    </div>
+    
+    <p class="help">이용할 유형을 여러 개 선택할 수 있습니다.</p>
 
         <form id="signupForm">
             <label>이메일</label>
@@ -1647,7 +1633,7 @@ async function getMyProfile() {
 
     const { data: profile, error } = await supabaseClient
         .from('profiles')
-        .select('id, nickname, full_name, phone, role')
+        .select('id, nickname, full_name, phone, role, roles, active_role')
         .eq('id', user.id)
         .single();
 
@@ -1822,9 +1808,50 @@ async function showVisitorPrivacyEditForm() {
             <input id="visitorEditName"
                 value="${escapeHTML(profile.full_name)}" required>
 
-            <label>회원 유형</label>
-            <input value="${escapeHTML(profile.role)}" disabled>
+            <label>가입 유형</label>
 
+<div id="privacyRoleOptions" style="margin:12px 0 20px;">
+
+    ${['임대인','임차인','방문객'].map(role => `
+        <label style="display:flex;align-items:center;gap:10px;
+                      margin:12px 0;font-weight:normal;">
+            <input
+                type="checkbox"
+                name="privacyRoles"
+                value="${role}"
+                style="width:auto;margin:0;"
+                ${(Array.isArray(profile.roles) &&
+                   profile.roles.includes(role)) ||
+                   (!profile.roles?.length && profile.role === role)
+                   ? 'checked' : ''}
+            >
+            ${role}
+        </label>
+    `).join('')}
+
+</div>
+
+<label>현재 사용할 유형</label>
+
+<select id="privacyActiveRole">
+    ${['임대인','임차인','방문객']
+        .filter(role =>
+            (Array.isArray(profile.roles) &&
+             profile.roles.includes(role)) ||
+            (!profile.roles?.length && profile.role === role)
+        )
+        .map(role => `
+            <option value="${role}"
+                ${(profile.active_role || profile.role) === role
+                    ? 'selected' : ''}>
+                ${role}
+            </option>
+        `).join('')}
+</select>
+
+<p class="help">
+    가입 유형은 여러 개 선택할 수 있으며, 현재 사용할 유형은 하나만 선택할 수 있습니다.
+</p>
             <label>전화번호</label>
             <input id="visitorEditPhone"
                 type="tel" maxlength="13"
@@ -1836,51 +1863,93 @@ async function showVisitorPrivacyEditForm() {
         </form>
     `;
 
-    document.getElementById('visitorEditForm')
-        .addEventListener('submit', async function(event) {
-            event.preventDefault();
+            document.getElementById('visitorEditForm')
+    .addEventListener('submit', async function(event) {
+        event.preventDefault();
 
-            const nickname =
-                document.getElementById('visitorEditNickname').value.trim();
-            const name =
-                document.getElementById('visitorEditName').value.trim();
-            const phone =
-                document.getElementById('visitorEditPhone').value.trim();
+        const nickname =
+            document.getElementById('visitorEditNickname').value.trim();
 
-            if(nickname.length < 2 ||
-               !/^[a-zA-Z0-9가-힣]+$/.test(nickname)) {
-                alert('닉네임은 2글자 이상, 한글·영어·숫자만 사용할 수 있습니다.');
-                return;
-            }
+        const name =
+            document.getElementById('visitorEditName').value.trim();
 
-            if(!name) {
-                alert('이름을 입력해 주세요.');
-                return;
-            }
+        const phone =
+            document.getElementById('visitorEditPhone').value.trim();
 
-            if(!/^010-\d{4}-\d{4}$/.test(phone)) {
-                alert('전화번호를 010-XXXX-XXXX 형식으로 입력해 주세요.');
-                return;
-            }
+        const roles = Array.from(
+            document.querySelectorAll('input[name="privacyRoles"]:checked')
+        ).map(input => input.value);
 
-            const { error } = await supabaseClient
-                .from('profiles')
-                .update({
-                    nickname: nickname,
-                    full_name: name,
-                    phone: phone
-                })
-                .eq('id', profile.id);
+        const activeRoleSelect =
+            document.getElementById('privacyActiveRole');
 
-            if(error) {
-                console.error('개인정보 수정 오류:', error);
-                alert('수정 실패: ' + error.message);
-                return;
-            }
+        if(roles.length === 0) {
+            alert('회원 유형을 하나 이상 선택해주세요.');
+            return;
+        }
 
-            alert('개인정보가 수정되었습니다!');
-            await showVisitorPrivacyDetails();
-        });
+        if(!activeRoleSelect || !activeRoleSelect.value) {
+            alert('현재 사용할 유형을 선택해주세요.');
+            return;
+        }
+
+        const activeRole = activeRoleSelect.value;
+
+        if(!roles.includes(activeRole)) {
+            alert('현재 사용할 유형은 가입 유형 중에서 선택해주세요.');
+            return;
+        }
+
+        if(nickname.length < 2 ||
+           !/^[a-zA-Z0-9가-힣]+$/.test(nickname)) {
+            alert('닉네임은 2글자 이상, 한글·영어·숫자만 사용할 수 있습니다.');
+            return;
+        }
+
+        if(!name) {
+            alert('이름을 입력해 주세요.');
+            return;
+        }
+
+        if(!/^010-\d{4}-\d{4}$/.test(phone)) {
+            alert('전화번호를 010-XXXX-XXXX 형식으로 입력해 주세요.');
+            return;
+        }
+
+        const { error } = await supabaseClient
+            .from('profiles')
+            .update({
+                nickname: nickname,
+                full_name: name,
+                phone: phone,
+                roles: roles,
+                active_role: activeRole,
+                role: activeRole
+            })
+            .eq('id', profile.id);
+
+        if(error) {
+            console.error('개인정보 수정 오류:', error);
+            alert('수정 실패: ' + error.message);
+            return;
+        }
+
+        const currentUser = getCurrentUser();
+
+        localStorage.setItem('harugageCurrentUser', JSON.stringify({
+            ...currentUser,
+            nickname: nickname,
+            name: name,
+            phone: phone,
+            roles: roles,
+            role: activeRole,
+            active_role: activeRole
+        }));
+
+        alert('개인정보가 수정되었습니다!');
+
+        routeDashboard();
+    });
 }
 
 // ==================================
