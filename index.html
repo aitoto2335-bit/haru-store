@@ -1037,10 +1037,11 @@ async function loadRentalData() {
         renderRentals();
         renderPopups();
 
-    } catch(error) {
-        console.error('임차·팝업 데이터 불러오기 오류:', error);
-    }
+} catch(error) {
+    console.error('임차·팝업 데이터 불러오기 오류:', error);
 }
+
+} // loadRentalData 함수 종료
 
 function getVacancies() {
     return vacanciesCache;
