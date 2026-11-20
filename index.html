@@ -439,8 +439,8 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
 
     <div class="section-box">
         <form id="loginForm">
-            <label>닉네임</label>
-            <input id="loginNickname" required placeholder="가입한 닉네임">
+            <label>이메일</label>
+            <input id="loginNickname" type="email" required placeholder="가입한 이메일">
 
             <label>비밀번호</label>
             <input id="loginPassword" type="password" required placeholder="비밀번호">
@@ -964,25 +964,51 @@ document.getElementById('signupForm').addEventListener('submit', async function(
 // 로그인 및 마이페이지
 // ==================================
 
-document.getElementById('loginForm').addEventListener('submit',function(event) {
+document.getElementById('loginForm').addEventListener('submit', async function(event) {
     event.preventDefault();
 
-    const nickname = document.getElementById('loginNickname').value.trim();
+    const email = document.getElementById('loginNickname').value.trim();
     const password = document.getElementById('loginPassword').value;
 
-    const user = getUsers().find(member =>
-        member.nickname.toLowerCase() === nickname.toLowerCase() && member.password === password
-    );
+    try {
+        // 1. Supabase 로그인
+        const { data: authData, error: authError } =
+            await supabaseClient.auth.signInWithPassword({
+                email: email,
+                password: password
+            });
 
-    if(!user) { alert('닉네임 또는 비밀번호가 일치하지 않습니다.'); return; }
+        if(authError) throw authError;
 
-    localStorage.setItem('harugageCurrentUser',JSON.stringify({
-        id:user.id, role:user.role, nickname:user.nickname, name:user.name, phone:user.phone
-    }));
+        // 2. 로그인한 회원의 프로필 가져오기
+        const { data: profile, error: profileError } =
+            await supabaseClient
+                .from('profiles')
+                .select('*')
+                .eq('id', authData.user.id)
+                .single();
 
-    this.reset();
-    alert(user.nickname+'님, 환영합니다!');
-    routeDashboard();
+        if(profileError) throw profileError;
+
+        // 3. 현재 로그인 정보 저장
+        localStorage.setItem('harugageCurrentUser', JSON.stringify({
+            id: profile.id,
+            role: profile.role,
+            nickname: profile.nickname,
+            name: profile.full_name,
+            phone: profile.phone
+        }));
+
+        this.reset();
+
+        alert(profile.nickname + '님, 환영합니다!');
+
+        routeDashboard();
+
+    } catch(error) {
+        console.error('로그인 오류:', error);
+        alert('로그인 실패: ' + error.message);
+    }
 });
 
 function routeDashboard() {
