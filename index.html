@@ -633,11 +633,7 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     <div id="ownerPosts" class="owner-panel active">
         <div class="section-box">
             <h3>내가 쓴 글</h3>
-            <div class="empty-state">
-                📝<br>
-                내가 작성한 커뮤니티 게시글이 표시될 공간입니다.<br>
-                커뮤니티 기능 완성 후 연결할 예정입니다.
-            </div>
+            <div id="ownerMyCommunityPosts"></div>
         </div>
     </div>
 
@@ -704,11 +700,7 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     <div id="tenantPosts" class="tenant-panel active">
         <div class="section-box">
             <h3>내가 쓴 글</h3>
-            <div class="empty-state">
-                📝<br>
-                내가 작성한 커뮤니티 게시글이 표시될 공간입니다.<br>
-                커뮤니티 기능 완성 후 연결할 예정입니다.
-            </div>
+            <div id="tenantMyCommunityPosts"></div>
         </div>
     </div>
 
@@ -766,11 +758,7 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     <div id="visitorPosts" class="visitor-panel active">
         <div class="section-box">
             <h3>내가 쓴 글</h3>
-            <div class="empty-state">
-                📝<br>
-                내가 작성한 커뮤니티 게시글이 표시될 공간입니다.<br>
-                커뮤니티 기능 완성 후 연결할 예정입니다.
-            </div>
+            <div id="visitorMyCommunityPosts"></div>
         </div>
     </div>
 
@@ -989,6 +977,9 @@ function showPage(pageId) {
     if(pageId === 'ownerDashboard') updateOwnerDashboard();
     if(pageId === 'tenantDashboard') updateTenantDashboard();
     if(pageId === 'visitorDashboard') updateVisitorDashboard();
+    if(pageId === 'ownerDashboard') renderMyCommunityPosts('owner');
+    if(pageId === 'tenantDashboard') renderMyCommunityPosts('tenant');
+    if(pageId === 'visitorDashboard') renderMyCommunityPosts('visitor');
     if(pageId === 'home') renderHome();
 
     if(pageId === 'renter' && isTenant) renderShopList();
@@ -1000,6 +991,9 @@ function showPanel(panelId,button,type) {
     document.getElementById(panelId).classList.add('active');
     button.parentElement.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
     button.classList.add('active');
+    if(panelId === type + 'Posts') {
+    renderMyCommunityPosts(type);
+}
 }
 
 
@@ -3412,7 +3406,7 @@ async function renderCommunityPosts() {
         );
 
         return `
-            <article class="community-post">
+            <article class="community-post" id="community-post-${post.id}">
                 <div class="community-post-top">
                     <span class="community-post-meta">
                         ${escapeHTML(post.author_nickname)}
@@ -3662,6 +3656,120 @@ async function deleteCommunityComment(commentId) {
     }
 
     renderCommunityPosts();
+}
+
+
+// ==================================
+// 마이페이지 - 내가 쓴 커뮤니티 게시글
+// ==================================
+
+async function renderMyCommunityPosts(type) {
+    const user = getCurrentUser();
+
+    const container = document.getElementById(
+        type + 'MyCommunityPosts'
+    );
+
+    if(!container) return;
+
+    if(!user) {
+        container.innerHTML = `
+            <div class="empty-state">로그인이 필요합니다.</div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="empty-state">내 게시글을 불러오는 중입니다.</div>
+    `;
+
+    const { data, error } = await supabaseClient
+        .from('community_posts')
+        .select('id, title, board_type, created_at')
+        .eq('author_id', user.id)
+        .order('created_at', { ascending: false });
+
+    if(error) {
+        console.error('내 게시글 조회 오류:', error);
+
+        container.innerHTML = `
+            <div class="empty-state">
+                게시글을 불러오지 못했습니다.
+            </div>
+        `;
+        return;
+    }
+
+    if(!data || data.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                📝<br>
+                아직 작성한 게시글이 없습니다.
+                <br><br>
+                <button class="sub-btn"
+                    onclick="showPage('community')">
+                    커뮤니티 바로가기
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = data.map(post => `
+        <div class="review-item">
+            <strong>${escapeHTML(post.title)}</strong>
+
+            <p>
+                ${escapeHTML(
+                    post.board_type === '전체'
+                        ? '전체 게시판'
+                        : post.board_type + ' 게시판'
+                )}
+            </p>
+
+            <p>
+                ${new Date(post.created_at).toLocaleString('ko-KR')}
+            </p>
+
+            <button class="sub-btn"
+                onclick="openMyCommunityPost('${post.id}')">
+                게시글 보기 →
+            </button>
+        </div>
+    `).join('');
+}
+
+// 마이페이지에서 게시글 누르면 커뮤니티의 해당 글로 이동
+async function openMyCommunityPost(postId) {
+    const { data: post, error } = await supabaseClient
+        .from('community_posts')
+        .select('id, board_type')
+        .eq('id', postId)
+        .single();
+
+    if(error || !post) {
+        alert('게시글을 찾을 수 없습니다.');
+        return;
+    }
+
+    communityBoard = post.board_type;
+
+    showPage('community');
+
+    renderCommunityTabs();
+
+    await renderCommunityPosts();
+
+    const target = document.getElementById(
+        'community-post-' + postId
+    );
+
+    if(target) {
+        target.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+        });
+    }
 }
 
 
