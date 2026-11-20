@@ -215,6 +215,83 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     .stamp-grid { grid-template-columns: repeat(2,1fr); }
     .hero h1 { font-size: 28px; }
 }
+
+/* 커뮤니티 */
+.community-tabs {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+
+.community-tabs button,
+.community-categories button {
+    padding: 11px 17px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: white;
+    color: #555;
+    cursor: pointer;
+}
+
+.community-tabs button.active,
+.community-categories button.active {
+    background: #123F5A;
+    border-color: #123F5A;
+    color: white;
+}
+
+.community-categories {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 18px;
+}
+
+.community-write {
+    margin-bottom: 25px;
+}
+
+.community-post {
+    background: white;
+    border: 1px solid #eee;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 12px;
+}
+
+.community-post h3 {
+    margin: 12px 0;
+    overflow-wrap: anywhere;
+}
+
+.community-post-content {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.7;
+    margin: 15px 0;
+}
+
+.community-post-meta {
+    color: #888;
+    font-size: 12px;
+}
+
+.community-post-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.community-empty {
+    padding: 35px 15px;
+    text-align: center;
+    color: #888;
+    background: white;
+    border: 1px solid #eee;
+    border-radius: 12px;
+}
+
 </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -374,14 +451,44 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     </div>
 </section>
 
+
 <!-- 커뮤니티 -->
 <section id="community" class="page">
     <h2>하루가게 커뮤니티</h2>
-    <div class="section-box">
-        <h3>창업자들의 이야기를 나눠보세요.</h3>
-        <p style="color:#888">창업 정보, 팝업 후기, 자유로운 소통 공간입니다.</p>
-        <p style="margin-top:20px">커뮤니티 기능은 준비 중입니다.</p>
+    <p style="color:#888; margin-bottom:20px;">
+        하루가게 이용자들과 다양한 이야기를 나눠보세요.
+    </p>
+
+    <!-- 게시판 선택 -->
+    <div id="communityBoardTabs" class="community-tabs"></div>
+
+    <!-- 전체 게시판 카테고리 -->
+    <div id="communityCategories" class="community-categories" hidden>
+        <button class="active" onclick="selectCommunityCategory('자유',this)">자유</button>
+        <button onclick="selectCommunityCategory('질문',this)">질문</button>
+        <button onclick="selectCommunityCategory('팁',this)">팁</button>
     </div>
+
+    <!-- 글 작성 -->
+    <div class="section-box community-write">
+        <h3>새 글 작성</h3>
+
+        <form id="communityWriteForm">
+            <label>제목</label>
+            <input id="communityTitle" maxlength="100"
+                   placeholder="제목을 입력하세요." required>
+
+            <label>내용</label>
+            <textarea id="communityContent" rows="5"
+                      maxlength="5000"
+                      placeholder="내용을 입력하세요." required></textarea>
+
+            <button class="main-btn" type="submit">게시글 등록</button>
+        </form>
+    </div>
+
+    <!-- 게시글 목록 -->
+    <div id="communityPostList"></div>
 </section>
 
 <!-- 마이페이지 -->
@@ -846,6 +953,7 @@ function showPage(pageId) {
     if(pageId === 'home') renderHome();
 
     if(pageId === 'renter' && isTenant) renderShopList();
+    if(pageId === 'community') renderCommunity();
 }
 
 function showPanel(panelId,button,type) {
@@ -3152,6 +3260,225 @@ analyzeReceiptWithAI = async function(image) {
 
     throw new Error('지금 Google AI 서버에 사용자가 몰려 있어요. 1~2분 뒤 다시 시도해주세요.');
 };
+
+
+// ==================================
+// 커뮤니티
+// ==================================
+
+let communityBoard = '전체';
+let communityCategory = '자유';
+
+// 현재 회원 유형에 맞는 게시판 구성
+function getCommunityBoards() {
+    const user = getCurrentUser();
+
+    if(!user) return ['전체'];
+
+    const role = user.active_role || user.role;
+
+    return ['전체', role];
+}
+
+// 게시판 버튼 생성
+function renderCommunityTabs() {
+    const tabs = document.getElementById('communityBoardTabs');
+    const boards = getCommunityBoards();
+
+    if(!boards.includes(communityBoard)) {
+        communityBoard = '전체';
+    }
+
+    tabs.innerHTML = boards.map(board => `
+        <button
+            class="${communityBoard === board ? 'active' : ''}"
+            onclick="selectCommunityBoard('${board}')">
+            ${board === '전체' ? '전체 게시판' : board + ' 게시판'}
+        </button>
+    `).join('');
+
+    document.getElementById('communityCategories').hidden =
+        communityBoard !== '전체';
+}
+
+// 게시판 선택
+function selectCommunityBoard(board) {
+    communityBoard = board;
+
+    if(board === '전체') {
+        communityCategory = '자유';
+    } else {
+        communityCategory = null;
+    }
+
+    renderCommunityTabs();
+    renderCommunityPosts();
+}
+
+// 전체 게시판 카테고리 선택
+function selectCommunityCategory(category, button) {
+    communityCategory = category;
+
+    document.querySelectorAll('.community-categories button')
+        .forEach(btn => btn.classList.remove('active'));
+
+    button.classList.add('active');
+
+    renderCommunityPosts();
+}
+
+// 커뮤니티 페이지 표시
+async function renderCommunity() {
+    renderCommunityTabs();
+
+    const form = document.getElementById('communityWriteForm');
+    const user = getCurrentUser();
+
+    form.querySelector('button[type="submit"]').disabled = !user;
+
+    renderCommunityPosts();
+}
+
+// 게시글 목록 불러오기
+async function renderCommunityPosts() {
+    const list = document.getElementById('communityPostList');
+
+    list.innerHTML = '<div class="community-empty">게시글을 불러오는 중입니다.</div>';
+
+    let query = supabaseClient
+        .from('community_posts')
+        .select('*')
+        .eq('board_type', communityBoard)
+        .order('created_at', { ascending: false });
+
+    if(communityBoard === '전체') {
+        query = query.eq('category', communityCategory);
+    }
+
+    const { data, error } = await query;
+
+    if(error) {
+        console.error('게시글 조회 오류:', error);
+        list.innerHTML = `
+            <div class="community-empty">
+                게시글을 불러오지 못했습니다.<br>
+                잠시 후 다시 시도해주세요.
+            </div>
+        `;
+        return;
+    }
+
+    if(!data || data.length === 0) {
+        list.innerHTML = `
+            <div class="community-empty">
+                아직 등록된 게시글이 없습니다.
+            </div>
+        `;
+        return;
+    }
+
+    const user = getCurrentUser();
+
+    list.innerHTML = data.map(post => `
+        <article class="community-post">
+            <div class="community-post-top">
+                <span class="community-post-meta">
+                    ${escapeHTML(post.author_nickname)}
+                    · ${escapeHTML(post.author_role)}
+                </span>
+
+                ${user && user.id === post.author_id ? `
+                    <button class="danger-btn"
+                        onclick="deleteCommunityPost('${post.id}')">
+                        삭제
+                    </button>
+                ` : ''}
+            </div>
+
+            <h3>${escapeHTML(post.title)}</h3>
+
+            <p class="community-post-content">${escapeHTML(post.content)}</p>
+
+            <div class="community-post-meta">
+                ${new Date(post.created_at).toLocaleString('ko-KR')}
+            </div>
+        </article>
+    `).join('');
+}
+
+// 게시글 등록
+document.getElementById('communityWriteForm')
+    .addEventListener('submit', async function(event) {
+        event.preventDefault();
+
+        const user = getCurrentUser();
+
+        if(!user) {
+            alert('로그인 후 글을 작성할 수 있습니다.');
+            return;
+        }
+
+        const title = document.getElementById('communityTitle').value.trim();
+        const content = document.getElementById('communityContent').value.trim();
+        const role = user.active_role || user.role;
+
+        if(!title || !content) {
+            alert('제목과 내용을 입력해주세요.');
+            return;
+        }
+
+        const submitButton = this.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+
+        try {
+            const { error } = await supabaseClient
+                .from('community_posts')
+                .insert({
+                    author_id: user.id,
+                    author_role: role,
+                    board_type: communityBoard,
+                    category: communityBoard === '전체'
+                        ? communityCategory
+                        : null,
+                    title: title,
+                    content: content
+                });
+
+            if(error) throw error;
+
+            alert('게시글이 등록되었습니다.');
+
+            this.reset();
+            await renderCommunityPosts();
+
+        } catch(error) {
+            console.error('게시글 등록 오류:', error);
+            alert('게시글 등록에 실패했습니다: ' + error.message);
+        } finally {
+            submitButton.disabled = false;
+        }
+    });
+
+// 게시글 삭제
+async function deleteCommunityPost(postId) {
+    if(!confirm('이 게시글을 삭제하시겠습니까?')) return;
+
+    const { error } = await supabaseClient
+        .from('community_posts')
+        .delete()
+        .eq('id', postId);
+
+    if(error) {
+        console.error('게시글 삭제 오류:', error);
+        alert('게시글 삭제에 실패했습니다.');
+        return;
+    }
+
+    alert('게시글이 삭제되었습니다.');
+    renderCommunityPosts();
+}
+
+
 // ==================================
 // 초기 실행
 // ==================================
