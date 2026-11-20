@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="google" content="notranslate">
-<title>하루가게</title>
+<link rel="icon" type="image/png" href="images/harugage-icon.png">
 
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -15,7 +15,17 @@ header {
     display: flex; justify-content: space-between; align-items: center;
     border-bottom: 1px solid #eee; gap: 20px;
 }
-.logo { font-size: 25px; font-weight: bold; color: #426b50; cursor: pointer; }
+.logo {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.logo img {
+    width: 150px;
+    height: auto;
+    object-fit: contain;
+}
 nav { display: flex; gap: 18px; flex-wrap: wrap; }
 nav button { border: none; background: none; font-size: 14px; cursor: pointer; color: #555; }
 nav button:hover { color: #426b50; }
@@ -196,7 +206,9 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
 <body>
 
 <header>
-    <div class="logo" onclick="showPage('home')">하루가게.</div>
+    <div class="logo" onclick="showPage('home')">
+    <img src="images/harugage-logo.png" alt="하루가게">
+</div>
     <nav>
         <button onclick="showPage('home')">홈</button>
         <button onclick="showPage('renter')">점포 찾기</button>
