@@ -2686,7 +2686,7 @@ ${JSON.stringify(shops)}
 
         console.log('[Gemini]',model,response.status,data);
 
-        if(response.status === 404 || response.status === 500 || response.status === 503) {
+                if(response.status === 404 || response.status === 429 || response.status === 500 || response.status === 503) {
             lastError = message;
             console.warn(model+' 사용 불가, 다음 모델 시도:',message);
             continue;
@@ -3486,7 +3486,7 @@ ${JSON.stringify(popups)}
 
         console.log('[Gemini]',model,response.status,data);
 
-        if(response.status === 404 || response.status === 500 || response.status === 503) {
+                if(response.status === 404 || response.status === 429 || response.status === 500 || response.status === 503) {
             lastError = message;
             console.warn(model+' 사용 불가, 다음 모델 시도:',message);
             continue;
