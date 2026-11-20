@@ -632,6 +632,7 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
         <button class="active" onclick="showPanel('ownerPosts',this,'owner')">내가 쓴 글</button>
         <button onclick="showPanel('ownerVacancies',this,'owner')">공실 관리</button>
         <button onclick="showPanel('ownerIncome',this,'owner')">월 수익</button>
+        <button onclick="showDashboardPrivacy('owner',this)">개인정보</button>
     </div>
 
     <div id="ownerPosts" class="owner-panel active">
@@ -666,6 +667,14 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
             <p>이번 달 총 수익</p>
             <h2 id="incomeMonthly">0원</h2>
         </div>
+        <div id="ownerPrivacy" class="owner-panel">
+            <div class="section-box">
+                <h3>개인정보 관리</h3>
+                <div id="ownerPrivacyContent">
+                    개인정보 메뉴를 선택해 주세요.
+                </div>
+            </div>
+        </div>
         <div class="section-box">
             <h3>월별 수익 내역</h3>
             <div id="incomeHistory" class="empty-state">예약 및 결제 시스템 연동 후 수익이 표시됩니다.</div>
@@ -699,6 +708,7 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
         <button onclick="showPanel('tenantRentals',this,'tenant')">임차내역</button>
         <button onclick="showPanel('tenantSchedule',this,'tenant')">D-day 알림</button>
         <button onclick="showPanel('tenantSuggestions',this,'tenant')">건의사항 보기</button>
+        <button onclick="showDashboardPrivacy('tenant',this)">개인정보</button>
     </div>
 
     <div id="tenantPosts" class="tenant-panel active">
@@ -730,7 +740,14 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
             <div id="tenantSuggestionList"></div>
         </div>
     </div>
-
+    <div id="tenantPrivacy" class="tenant-panel">
+        <div class="section-box">
+            <h3>개인정보 관리</h3>
+            <div id="tenantPrivacyContent">
+                개인정보 메뉴를 선택해 주세요.
+            </div>
+        </div>
+    </div>
     <div class="section-box">
         <button class="sub-btn" onclick="logout()">로그아웃</button>
         <div class="delete-area">
@@ -1861,6 +1878,212 @@ async function getMyProfile() {
     }
 
     return { user, profile };
+}
+
+
+// ==================================
+// 임대인 / 임차인 개인정보 관리
+// ==================================
+
+async function showDashboardPrivacy(type, button) {
+    const { data: { user }, error } = await supabaseClient.auth.getUser();
+
+    if(error || !user) {
+        alert('로그인이 필요합니다.');
+        return;
+    }
+
+    const panelClass = type === 'owner' ? '.owner-panel' : '.tenant-panel';
+    const panelId = type + 'Privacy';
+    const contentId = type + 'PrivacyContent';
+
+    document.querySelectorAll(panelClass).forEach(panel => {
+        panel.classList.remove('active');
+    });
+
+    document.getElementById(panelId).classList.add('active');
+
+    if(button) {
+        button.parentElement.querySelectorAll('button').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        button.classList.add('active');
+    }
+
+    document.getElementById(contentId).innerHTML = `
+        <h3>본인 확인</h3>
+        <p>개인정보를 확인하려면 현재 비밀번호를 입력해 주세요.</p>
+
+        <form id="${type}PrivacyPasswordForm">
+            <label>현재 비밀번호</label>
+            <input id="${type}PrivacyPassword"
+                   type="password" required
+                   placeholder="비밀번호를 입력해 주세요.">
+
+            <button class="main-btn" type="submit">본인 확인</button>
+        </form>
+    `;
+
+    document.getElementById(type + 'PrivacyPasswordForm')
+        .addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const password = document.getElementById(
+                type + 'PrivacyPassword'
+            ).value;
+
+            const { data: { user: currentUser }, error: authError } =
+                await supabaseClient.auth.getUser();
+
+            if(authError || !currentUser || !currentUser.email) {
+                alert('로그인 정보를 확인할 수 없습니다.');
+                return;
+            }
+
+            const { error: loginError } =
+                await supabaseClient.auth.signInWithPassword({
+                    email: currentUser.email,
+                    password: password
+                });
+
+            if(loginError) {
+                alert('비밀번호가 일치하지 않습니다.');
+                return;
+            }
+
+            await renderDashboardPrivacy(type);
+        });
+}
+
+
+// 개인정보 표시
+async function renderDashboardPrivacy(type) {
+    const result = await getMyProfile();
+    if(!result) return;
+
+    const profile = result.profile;
+    const content = document.getElementById(type + 'PrivacyContent');
+
+    content.innerHTML = `
+        <div class="data-item">
+            <p>닉네임</p>
+            <h3>${escapeHTML(profile.nickname)}</h3>
+
+            <p>이름</p>
+            <h3>${escapeHTML(profile.full_name)}</h3>
+
+            <p>회원 유형</p>
+            <h3>${escapeHTML(profile.active_role || profile.role)}</h3>
+
+            <p>전화번호</p>
+            <h3>${escapeHTML(profile.phone || '')}</h3>
+        </div>
+
+        <button class="main-btn"
+            onclick="showDashboardPrivacyEdit('${type}')">
+            개인정보 수정하기
+        </button>
+    `;
+}
+
+
+// 개인정보 수정 화면
+async function showDashboardPrivacyEdit(type) {
+    const result = await getMyProfile();
+    if(!result) return;
+
+    const profile = result.profile;
+    const content = document.getElementById(type + 'PrivacyContent');
+
+    content.innerHTML = `
+        <h3>개인정보 수정</h3>
+
+        <form id="${type}PrivacyEditForm">
+            <label>닉네임</label>
+            <input id="${type}EditNickname"
+                   value="${escapeHTML(profile.nickname)}" required>
+
+            <label>이름</label>
+            <input id="${type}EditName"
+                   value="${escapeHTML(profile.full_name)}" required>
+
+            <label>전화번호</label>
+            <input id="${type}EditPhone"
+                   type="tel" maxlength="13"
+                   value="${escapeHTML(profile.phone || '')}" required>
+
+            <p class="help">
+                회원 유형 변경은 기존 가입 유형 설정을 따릅니다.
+            </p>
+
+            <button class="main-btn" type="submit">수정 완료</button>
+            <button class="sub-btn" type="button"
+                onclick="renderDashboardPrivacy('${type}')">
+                취소
+            </button>
+        </form>
+    `;
+
+    document.getElementById(type + 'PrivacyEditForm')
+        .addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const nickname = document.getElementById(
+                type + 'EditNickname'
+            ).value.trim();
+
+            const name = document.getElementById(
+                type + 'EditName'
+            ).value.trim();
+
+            const phone = document.getElementById(
+                type + 'EditPhone'
+            ).value.trim();
+
+            if(nickname.length < 2 ||
+               !/^[a-zA-Z0-9가-힣]+$/.test(nickname)) {
+                alert('닉네임은 2글자 이상, 한글·영어·숫자만 사용할 수 있습니다.');
+                return;
+            }
+
+            if(!name) {
+                alert('이름을 입력해 주세요.');
+                return;
+            }
+
+            if(!/^010-\d{4}-\d{4}$/.test(phone)) {
+                alert('전화번호를 010-XXXX-XXXX 형식으로 입력해 주세요.');
+                return;
+            }
+
+            const { error } = await supabaseClient
+                .from('profiles')
+                .update({
+                    nickname: nickname,
+                    full_name: name,
+                    phone: phone
+                })
+                .eq('id', profile.id);
+
+            if(error) {
+                console.error('개인정보 수정 오류:', error);
+                alert('개인정보 수정 실패: ' + error.message);
+                return;
+            }
+
+            const currentUser = getCurrentUser();
+
+            localStorage.setItem('harugageCurrentUser', JSON.stringify({
+                ...currentUser,
+                nickname: nickname,
+                name: name,
+                phone: phone
+            }));
+
+            alert('개인정보가 수정되었습니다.');
+
+            routeDashboard();
+        });
 }
 
 
