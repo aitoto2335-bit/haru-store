@@ -2856,7 +2856,8 @@ function handleReceiptResult(result) {
 
     // 1) 영수증인지
     if(!result || !result.isReceipt) {
-        invalid('영수증이 아니에요. 영수증 전체가 잘 보이도록 다시 촬영해주세요.');
+        setReceiptStatus('error','❌ 영수증이 아닙니다. 영수증 사진을 올려주세요.');
+        container.innerHTML = '';invalid('영수증이 아니에요. 영수증 전체가 잘 보이도록 다시 촬영해주세요.');
         return;
     }
 
@@ -3033,7 +3034,7 @@ analyzeReceiptWithAI = async function(image) {
         try {
             return await analyzeReceiptOnce(image);
         } catch(error) {
-            if(!/바빠요/.test(error.message)) throw error;
+            if(!/바빠요|오래 걸려요/.test(error.message)) throw error;
         }
     }
 
