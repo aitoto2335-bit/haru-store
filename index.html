@@ -716,7 +716,7 @@ const GEMINI_API_KEY = 'AQ.Ab8RN6JDvlKbq0IbZ9e3F6MXzhdLq02yHiGap025wCr-ce9skw';
 // 앞에서부터 차례로 시도, 404(모델 없음)이면 다음 모델로 넘어감
 const GEMINI_MODELS = ['gemini-3.8-flash','gemini-3-flash','gemini-flash-latest'];
 
-const AI_TIMEOUT_MS = 60000;            // AI 응답 최대 대기 시간 (60초)
+const AI_TIMEOUT_MS = 20000;            // 모델 하나당 최대 대기 시간 (20초)
 const REFUND_RATE = 0.1;                // 결제 금액의 10% 환급
 const MAX_IMAGE_SIDE = 1600;            // 업로드 전 이미지 최대 크기(px)
 const ALLOW_UNREGISTERED_SHOP = false;  // false: 하루가게에 등록된 가게 영수증만 인정
@@ -3023,18 +3023,23 @@ const analyzeReceiptOnce = analyzeReceiptWithAI;
 analyzeReceiptWithAI = async function(image) {
     await refreshGeminiModels();
 
-    const waits = [0,3000,6000];
+    const waits = [0,2000,4000,6000];
 
     for(const wait of waits) {
-        if(wait) {
-            console.warn('[Gemini] 모든 모델이 바빠서 '+(wait/1000)+'초 뒤 다시 시도해요.');
-            await new Promise(resolve => setTimeout(resolve,wait));
-        }
+        if(wait) await new Promise(resolve => setTimeout(resolve,wait));
 
         try {
             return await analyzeReceiptOnce(image);
         } catch(error) {
-            if(!/바빠요|오래 걸려요/.test(error.message)) throw error;
+            if(/오래 걸려요/.test(error.message)) {
+                // 응답이 느린 모델은 맨 뒤로 보내고 다음 모델부터 다시 시도
+                GEMINI_MODELS.push(GEMINI_MODELS.shift());
+                console.warn('[Gemini] 응답이 느려서 다른 모델로 다시 시도해요:',GEMINI_MODELS[0]);
+                continue;
+            }
+
+            if(!/바빠요/.test(error.message)) throw error;
+            console.warn('[Gemini] 모든 모델이 바빠서 잠시 뒤 다시 시도해요.');
         }
     }
 
