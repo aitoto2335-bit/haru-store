@@ -53,7 +53,19 @@ h3 { margin-bottom: 12px; }
 .danger-btn { background: white; color: #d34d4d; border: 1px solid #d34d4d; padding: 11px 18px; border-radius: 8px; cursor: pointer; }
 
 .section-box { background: white; padding: 25px; border: 1px solid #eee; border-radius: 14px; margin-bottom: 20px; }
-
+/* 이용 권한 안내 메시지 */
+.access-message {
+    background: #E8F2F7;
+    border: 1px solid #C9DFEA;
+    border-radius: 12px;
+    padding: 25px;
+    margin: 20px 0;
+    color: #123F5A;
+    text-align: center;
+    line-height: 1.7;
+    font-weight: 500;
+}
+    
 input, textarea, select {
     width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 7px;
     margin: 9px 0 17px; font-size: 14px; font-family: inherit;
@@ -239,19 +251,11 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
 <!-- 점포 찾기 -->
 <section id="renter" class="page">
     <h2>나에게 맞는 공실 찾기</h2>
-<div class="section-box">
-    <label>공실 이름 또는 주소 검색</label>
-    <input id="searchKeyword" placeholder="예: 묵호, 카페">
-
-    <label>희망 지역</label>
-    <select id="searchArea">
-        <option value="">전체 지역</option>
-        <option>묵호동</option>
-        <option>천곡동</option>
-        <option>발한동</option>
-    </select>
-    <button class="main-btn" onclick="renderShopList()">공실 검색</button>
-</div><h2>나에게 맞는 공실 찾기</h2>
+    
+    <div id="renterAccessMessage" class="access-message" hidden>
+    임차인 계정으로 로그인하면 공실을 검색할 수 있습니다.
+</div>
+    
 <div class="section-box">
     <label>공실 이름 또는 주소 검색</label>
     <input id="searchKeyword" placeholder="예: 묵호, 카페">
@@ -265,7 +269,6 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     </select>
     <button class="main-btn" onclick="renderShopList()">공실 검색</button>
 </div>
-    </div>
     <div id="shopList" class="cards"></div>
 </section>
 
@@ -345,6 +348,10 @@ footer { text-align: center; padding: 35px; color: #999; font-size: 13px; }
     <button class="back-btn" onclick="showPage('mypage')">← 마이페이지</button>
     <h2>내 공실 등록하기</h2>
 
+    <div id="ownerAccessMessage" class="access-message" hidden>
+        임대인 계정으로 로그인하면 공실을 등록할 수 있습니다.
+    </div>
+    
     <div class="section-box">
         <form id="vacancyForm">
             <label>점포 이름</label>
@@ -753,77 +760,42 @@ function escapeHTML(value) {
 // ==================================
 
 function showPage(pageId) {
-
-    // 현재 로그인한 회원 확인
     const user = getCurrentUser();
 
-    // 공실 찾기는 임차인만 이용 가능
-    if(pageId === 'renter') {
-        if(!user || user.role !== '임차인') {
-            alert('임차인만 사용할 수 있는 페이지입니다.');
-            return;
-        }
-    }
+    // 회원 유형 확인
+    const isTenant = user && user.role === '임차인';
+    const isOwner = user && user.role === '임대인';
 
-    // 공실 등록은 임대인만 이용 가능
-    if(pageId === 'owner') {
-        if(!user || user.role !== '임대인') {
-            alert('임대인만 사용할 수 있는 페이지입니다.');
-            return;
-        }
-    }
+    // 공실 찾기: 임차인만 검색 가능
+    document.getElementById('renterAccessMessage').hidden = !!isTenant;
 
-    // 기존 페이지 이동 기능
+    document.querySelectorAll('#renter .section-box').forEach(box => {
+        box.hidden = !isTenant;
+    });
+
+    document.getElementById('shopList').hidden = !isTenant;
+
+    // 공실 등록: 임대인만 등록 가능
+    document.getElementById('ownerAccessMessage').hidden = !!isOwner;
+
+    document.querySelector('#owner .section-box').hidden = !isOwner;
+
+    // 페이지 이동
     document.querySelectorAll('.page').forEach(page => {
         page.classList.remove('active');
     });
 
     document.getElementById(pageId).classList.add('active');
 
-    window.scrollTo(0,0);
+    window.scrollTo(0, 0);
 
     if(pageId === 'mypage') updateMypage();
     if(pageId === 'ownerDashboard') updateOwnerDashboard();
     if(pageId === 'tenantDashboard') updateTenantDashboard();
     if(pageId === 'visitorDashboard') updateVisitorDashboard();
     if(pageId === 'home') renderHome();
-    if(pageId === 'renter') renderShopList();
-}function showPage(pageId) {
 
-    // 현재 로그인한 회원 확인
-    const user = getCurrentUser();
-
-    // 공실 찾기는 임차인만 이용 가능
-    if(pageId === 'renter') {
-        if(!user || user.role !== '임차인') {
-            alert('임차인만 사용할 수 있는 페이지입니다.');
-            return;
-        }
-    }
-
-    // 공실 등록은 임대인만 이용 가능
-    if(pageId === 'owner') {
-        if(!user || user.role !== '임대인') {
-            alert('임대인만 사용할 수 있는 페이지입니다.');
-            return;
-        }
-    }
-
-    // 기존 페이지 이동 기능
-    document.querySelectorAll('.page').forEach(page => {
-        page.classList.remove('active');
-    });
-
-    document.getElementById(pageId).classList.add('active');
-
-    window.scrollTo(0,0);
-
-    if(pageId === 'mypage') updateMypage();
-    if(pageId === 'ownerDashboard') updateOwnerDashboard();
-    if(pageId === 'tenantDashboard') updateTenantDashboard();
-    if(pageId === 'visitorDashboard') updateVisitorDashboard();
-    if(pageId === 'home') renderHome();
-    if(pageId === 'renter') renderShopList();
+    if(pageId === 'renter' && isTenant) renderShopList();
 }
 
 function showPanel(panelId,button,type) {
@@ -1917,6 +1889,19 @@ function shopCardHTML(item) {
 }
 
 function renderShopList() {
+    const user = getCurrentUser();
+
+    if(!user || user.role !== '임차인') {
+        document.getElementById('renterAccessMessage').hidden = false;
+
+        document.querySelectorAll('#renter .section-box').forEach(box => {
+            box.hidden = true;
+        });
+
+        document.getElementById('shopList').hidden = true;
+        return;
+    }
+    
     const keyword = document.getElementById('searchKeyword').value.trim().toLowerCase();
     const area = document.getElementById('searchArea').value;
     const container = document.getElementById('shopList');
